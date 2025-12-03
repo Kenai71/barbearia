@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Mail, Loader2, Chrome } from 'lucide-react'; // Chrome usado como ícone do Google
+import { User, Lock, Mail, Loader2, Chrome, Scissors } from 'lucide-react';
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -11,25 +11,20 @@ export default function Login() {
   const [fullName, setFullName] = useState('');
   const navigate = useNavigate();
 
-  // Função de Login com Google
   const handleGoogleLogin = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-      });
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
       if (error) throw error;
     } catch (error) {
-      alert('Erro ao conectar com Google: ' + error.message);
+      alert('Erro Google: ' + error.message);
     }
   };
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       if (isRegistering) {
-        // Cadastro
         const { error } = await supabase.auth.signUp({
           email,
           password,
@@ -39,10 +34,9 @@ export default function Login() {
         alert('Cadastro realizado! Verifique seu email ou faça login.');
         setIsRegistering(false);
       } else {
-        // Login com Email
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate('/dashboard'); // Redireciona para o dashboard
+        navigate('/dashboard');
       }
     } catch (error) {
       alert(error.message);
@@ -52,111 +46,132 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100">
-      
-      {/* Card Dividido */}
-      <div className="flex w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden min-h-[600px]">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 md:p-6">
+      <div className="flex w-full max-w-5xl bg-white rounded-[2rem] shadow-xl overflow-hidden min-h-[600px] md:min-h-[700px] border border-slate-200">
         
-        {/* LADO ESQUERDO - Imagem */}
-        <div className="hidden md:flex w-1/2 bg-blue-500 items-center justify-center p-12 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-full bg-blue-600 opacity-20 rounded-full scale-150 translate-x-1/2 translate-y-1/2"></div>
+        {/* LADO ESQUERDO: Placeholder Azul Claro (Agradável) */}
+        {/* 'hidden md:flex' faz ele sumir no celular e aparecer como flex no desktop */}
+        <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-50 to-blue-200 relative items-center justify-center p-12">
+          {/* Elementos decorativos de fundo */}
+          <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-50">
+              <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
+              <div className="absolute top-40 -right-20 w-72 h-72 bg-blue-100 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
+          </div>
           
-          <div className="relative z-10 text-center text-white">
-            <h2 className="text-3xl font-bold mb-4">Bem-vindo de volta!</h2>
-            <p className="text-blue-100 mb-8">Agende seu corte com os melhores profissionais.</p>
-            <img 
-              src="https://illustrations.popsy.co/amber/barber.svg" 
-              alt="Ilustração Barbearia" 
-              className="w-full h-auto drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
-            />
+          <div className="relative z-10 flex flex-col justify-between h-full py-8">
+            <div className="flex items-center gap-3 text-blue-900">
+              <div className="bg-white/60 p-2.5 rounded-xl backdrop-blur-md shadow-sm">
+                <Scissors size={28} className="text-blue-700" />
+              </div>
+              <span className="font-bold text-xl tracking-widest uppercase">BarberPro</span>
+            </div>
+            
+            <div className="mt-12">
+              <h2 className="text-4xl lg:text-5xl font-extrabold mb-6 leading-tight text-blue-900">
+                O estilo que <br/>você merece.
+              </h2>
+              <p className="text-blue-700 text-lg leading-relaxed max-w-md">
+                Agende seu horário com os melhores profissionais da cidade. Rápido, fácil e no seu tempo.
+              </p>
+            </div>
+
+            <div className="text-blue-600 text-sm font-medium mt-auto">
+              © 2025 BarberPro. Todos os direitos reservados.
+            </div>
           </div>
         </div>
 
-        {/* LADO DIREITO - Formulário */}
-        <div className="w-full md:w-1/2 p-8 md:p-12 flex flex-col justify-center">
-          
-          <div className="mb-8 text-center md:text-left">
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">
-              {isRegistering ? 'Criar Conta' : 'Login'}
-            </h1>
-            <p className="text-slate-400">
-              {isRegistering ? 'Preencha seus dados abaixo' : 'Entre com sua conta'}
-            </p>
-          </div>
+        {/* LADO DIREITO: Formulário Clean (Responsivo) */}
+        {/* No celular ocupa 100% (w-full), no desktop ocupa 50% (md:w-1/2) */}
+        <div className="w-full md:w-1/2 p-8 sm:p-12 md:p-16 flex flex-col justify-center bg-white">
+          <div className="max-w-md mx-auto w-full">
+            
+            {/* Cabeçalho do Form */}
+            <div className="mb-10">
+              <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">
+                {isRegistering ? 'Crie sua conta' : 'Bem-vindo de volta'}
+              </h1>
+              <p className="text-slate-500 text-base">
+                {isRegistering ? 'Preencha seus dados para começar sua jornada.' : 'Insira suas credenciais para acessar o painel.'}
+              </p>
+            </div>
 
-          <form onSubmit={handleAuth} className="space-y-5">
-            {isRegistering && (
-              <div className="relative">
-                <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
+            {/* Formulário */}
+            <form onSubmit={handleAuth} className="space-y-5">
+              {isRegistering && (
+                <div className="relative group">
+                  <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <input
+                    type="text"
+                    placeholder="Seu nome completo"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
+              <div className="relative group">
+                <Mail className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
-                  type="text"
-                  placeholder="Nome de Usuário"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
+                  type="email"
+                  placeholder="seu@email.com"
+                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
                 />
               </div>
-            )}
 
-            <div className="relative">
-              <Mail className="absolute left-3 top-3.5 text-slate-400" size={20} />
-              <input
-                type="email"
-                placeholder="nome@email.com"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
+              <div className="relative group">
+                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Criar Conta Grátis' : 'Entrar na Conta')}
+              </button>
+            </form>
+
+            {/* Divisor */}
+            <div className="flex items-center my-8">
+              <div className="flex-grow border-t border-slate-200"></div>
+              <span className="mx-4 text-slate-400 text-sm font-medium lowercase">ou</span>
+              <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-3.5 text-slate-400" size={20} />
-              <input
-                type="password"
-                placeholder="Senha"
-                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg transition-all duration-300 shadow-md flex items-center justify-center gap-2"
-            >
-              {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar' : 'Entrar')}
-            </button>
-          </form>
-
-          <div className="flex items-center my-6">
-            <div className="flex-grow border-t border-slate-200"></div>
-            <span className="mx-4 text-slate-400 text-sm">Ou logar com</span>
-            <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-
-          {/* Botão Google */}
-          <div className="flex justify-center gap-4">
+            {/* Botão Google */}
             <button 
               onClick={handleGoogleLogin}
-              className="flex items-center gap-2 px-6 py-2 border border-slate-200 rounded-full hover:bg-slate-50 transition-colors text-slate-600 font-medium"
+              className="w-full flex items-center justify-center gap-3 px-6 py-3.5 border-2 border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-700 font-bold bg-white"
             >
-              <Chrome size={20} className="text-red-500" /> Google
+              <Chrome size={22} className="text-red-500" /> 
+              <span>Continuar com Google</span>
             </button>
-          </div>
 
-          <p className="mt-8 text-center text-sm text-slate-500">
-            {isRegistering ? 'Já tem uma conta?' : 'Não tem uma conta?'} 
-            <button 
-              onClick={() => setIsRegistering(!isRegistering)}
-              className="ml-1 text-blue-500 font-semibold hover:underline"
-            >
-              {isRegistering ? 'Fazer Login' : 'Inscrever-se'}
-            </button>
-          </p>
+            {/* Alternar Login/Cadastro */}
+            <p className="mt-8 text-center text-slate-600 font-medium">
+              {isRegistering ? 'Já tem uma conta?' : 'Ainda não tem conta?'} 
+              <button 
+                onClick={() => setIsRegistering(!isRegistering)}
+                className="ml-1 text-blue-600 font-bold hover:underline"
+              >
+                {isRegistering ? 'Fazer Login' : 'Cadastre-se agora'}
+              </button>
+            </p>
+          </div>
         </div>
       </div>
     </div>
