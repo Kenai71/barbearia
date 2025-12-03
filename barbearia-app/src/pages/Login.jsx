@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
-import { User, Lock, Mail, ArrowRight, Loader2, Chrome } from 'lucide-react'; // Chrome icon usado para Google
+import { User, Lock, Mail, Loader2, Chrome } from 'lucide-react'; // Chrome usado como ícone do Google
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -54,19 +54,16 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-slate-100">
       
-      {/* Container Principal (Card Dividido) */}
+      {/* Card Dividido */}
       <div className="flex w-full max-w-4xl bg-white rounded-2xl shadow-2xl overflow-hidden min-h-[600px]">
         
-        {/* LADO ESQUERDO - Imagem/Ilustração (Baseado na sua referência) */}
+        {/* LADO ESQUERDO - Imagem */}
         <div className="hidden md:flex w-1/2 bg-blue-500 items-center justify-center p-12 relative overflow-hidden">
-          {/* Círculo decorativo de fundo */}
           <div className="absolute top-0 left-0 w-full h-full bg-blue-600 opacity-20 rounded-full scale-150 translate-x-1/2 translate-y-1/2"></div>
           
           <div className="relative z-10 text-center text-white">
             <h2 className="text-3xl font-bold mb-4">Bem-vindo de volta!</h2>
-            <p className="text-blue-100 mb-8">Agende seu corte com os melhores profissionais da cidade.</p>
-            
-            {/* Espaço para sua imagem (Pode trocar o src depois) */}
+            <p className="text-blue-100 mb-8">Agende seu corte com os melhores profissionais.</p>
             <img 
               src="https://illustrations.popsy.co/amber/barber.svg" 
               alt="Ilustração Barbearia" 
@@ -83,7 +80,7 @@ export default function Login() {
               {isRegistering ? 'Criar Conta' : 'Login'}
             </h1>
             <p className="text-slate-400">
-              {isRegistering ? 'Preencha seus dados abaixo' : 'Entre com sua conta para continuar'}
+              {isRegistering ? 'Preencha seus dados abaixo' : 'Entre com sua conta'}
             </p>
           </div>
 
@@ -126,23 +123,15 @@ export default function Login() {
               />
             </div>
 
-            {/* Link "Esqueceu a senha?" (Apenas visual por enquanto) */}
-            {!isRegistering && (
-              <div className="text-right">
-                <a href="#" className="text-sm text-blue-500 hover:underline">Esqueceu a senha?</a>
-              </div>
-            )}
-
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg transition-all duration-300 transform hover:-translate-y-1 shadow-md flex items-center justify-center gap-2"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 rounded-lg transition-all duration-300 shadow-md flex items-center justify-center gap-2"
             >
               {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar' : 'Entrar')}
             </button>
           </form>
 
-          {/* Divisor */}
           <div className="flex items-center my-6">
             <div className="flex-grow border-t border-slate-200"></div>
             <span className="mx-4 text-slate-400 text-sm">Ou logar com</span>
@@ -159,7 +148,6 @@ export default function Login() {
             </button>
           </div>
 
-          {/* Rodapé - Trocar Login/Cadastro */}
           <p className="mt-8 text-center text-sm text-slate-500">
             {isRegistering ? 'Já tem uma conta?' : 'Não tem uma conta?'} 
             <button 
