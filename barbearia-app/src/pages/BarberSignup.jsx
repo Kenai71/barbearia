@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link, useNavigate } from 'react-router-dom'; // Adicionado useNavigate
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Lock, Mail, Loader2, Scissors, ArrowLeft, Briefcase, CheckCircle } from 'lucide-react';
 
-// Ícone do Google
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -17,9 +16,9 @@ export default function BarberSignup() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Novo estado
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const navigate = useNavigate(); // Hook para redirecionar
+  const navigate = useNavigate();
 
   const handleGoogleSignup = async () => {
     try {
@@ -35,7 +34,6 @@ export default function BarberSignup() {
   const handleSignup = async (e) => {
     e.preventDefault();
     
-    // 1. Validação de Senhas
     if (password !== confirmPassword) {
       alert('As senhas não conferem! Por favor, verifique.');
       return;
@@ -44,29 +42,25 @@ export default function BarberSignup() {
     setLoading(true);
 
     try {
-      // 2. Cria usuário
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { 
           data: { 
             full_name: fullName,
-            role: 'barber' // Trigger no banco vai pegar isso e criar o perfil
+            role: 'barber'
           } 
         }
       });
 
       if (error) throw error;
 
-      // 3. Login direto e Redirecionamento
       if (data.session) {
-        // Se o Supabase retornou uma sessão (Email confirmation OFF), redireciona já.
         alert('Cadastro realizado com sucesso! Bem-vindo.');
         navigate('/admin'); 
       } else if (data.user) {
-        // Se o Supabase exige confirmação de email
         alert('Cadastro realizado! Verifique seu e-mail para confirmar a conta antes de entrar.');
-        navigate('/'); // Manda pro login
+        navigate('/');
       }
 
     } catch (error) {
@@ -80,7 +74,6 @@ export default function BarberSignup() {
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 md:p-6 font-sans">
       <div className="flex w-full max-w-5xl bg-white rounded-[2rem] shadow-xl overflow-hidden min-h-[600px] md:min-h-[700px] border border-slate-200">
         
-        {/* LADO ESQUERDO: Visual Azul */}
         <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-50 to-blue-200 relative items-center justify-center p-12">
           <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-50">
               <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
@@ -94,7 +87,6 @@ export default function BarberSignup() {
               </div>
               <span className="font-bold text-xl tracking-widest uppercase">BarberPro</span>
             </div>
-            
             <div className="mt-12">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100/50 text-blue-800 text-xs font-bold uppercase tracking-wide mb-4 border border-blue-200">
                 <Briefcase size={14} /> Área do Profissional
@@ -106,22 +98,18 @@ export default function BarberSignup() {
                 Entre para o time dos melhores. Organize sua agenda e seus clientes em um só lugar.
               </p>
             </div>
-
             <div className="text-blue-600 text-sm font-medium mt-auto">
               © 2025 BarberPro Partners.
             </div>
           </div>
         </div>
 
-        {/* LADO DIREITO: Formulário */}
         <div className="w-full md:w-1/2 p-8 sm:p-12 md:p-16 flex flex-col justify-center bg-white relative">
-          
           <Link to="/" className="absolute top-8 left-8 text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-2 text-sm font-medium">
             <ArrowLeft size={16} /> Voltar
           </Link>
 
           <div className="max-w-md mx-auto w-full mt-10 md:mt-0">
-            
             <div className="mb-8">
               <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">
                 Cadastro de Barbeiro
@@ -132,7 +120,6 @@ export default function BarberSignup() {
             </div>
 
             <form onSubmit={handleSignup} className="space-y-4">
-              
               <div className="relative group">
                 <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input

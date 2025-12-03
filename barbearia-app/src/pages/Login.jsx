@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Lock, Mail, Loader2, Scissors } from 'lucide-react';
+import { User, Lock, Mail, Loader2, Scissors, CheckCircle } from 'lucide-react';
 
 // Ícone SVG colorido do Google
 const GoogleIcon = () => (
@@ -18,6 +18,7 @@ export default function Login() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // Novo campo
   const [fullName, setFullName] = useState('');
   const navigate = useNavigate();
 
@@ -32,23 +33,38 @@ export default function Login() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
+    
+    // Validação de senha
+    if (isRegistering && password !== confirmPassword) {
+      alert('As senhas não conferem!');
+      return;
+    }
+
     setLoading(true);
     try {
       if (isRegistering) {
         // Cadastro de CLIENTE (Padrão)
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName } }
         });
         if (error) throw error;
-        alert('Cadastro de cliente realizado! Verifique seu email ou faça login.');
-        setIsRegistering(false);
+
+        // Se o login for automático (sem confirmar email), o App.jsx vai pegar a sessão
+        // Se precisar confirmar, avisamos:
+        if (!data.session) {
+          alert('Cadastro realizado! Verifique seu email para confirmar.');
+          setIsRegistering(false);
+        } else {
+          // Redireciona forçado para garantir (App.jsx cuidaria disso também)
+          navigate('/');
+        }
       } else {
-        // Login (Funciona para ambos, o App.jsx redireciona)
+        // Login
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate('/'); // O redirecionamento é automático no App.jsx
+        navigate('/'); // O App.jsx vai redirecionar pro Dashboard
       }
     } catch (error) {
       alert(error.message);
@@ -135,7 +151,7 @@ export default function Login() {
                 <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Senha"
                   className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -143,12 +159,26 @@ export default function Login() {
                 />
               </div>
 
+              {isRegistering && (
+                <div className="relative group">
+                  <CheckCircle className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <input
+                    type="password"
+                    placeholder="Confirmar Senha"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
               <button 
                 type="submit" 
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4"
               >
-                {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar como Cliente' : 'Entrar na Conta')}
+                {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar e Entrar' : 'Entrar na Conta')}
               </button>
             </form>
 

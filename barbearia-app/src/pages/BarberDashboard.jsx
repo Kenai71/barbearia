@@ -31,7 +31,7 @@ export default function BarberDashboard({ session }) {
   const fetchAppointments = async () => {
     const { data, error } = await supabase
       .from('appointments')
-      .select('*, profiles(full_name, email)')
+      .select('*, profiles:client_id(full_name, email)')
       .order('date_time', { ascending: true });
 
     if (!error) {
