@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Login from './pages/Login';
-import BarberSignup from './pages/BarberSignup'; // Importe a nova página
+import BarberSignup from './pages/BarberSignup';
 import ClientDashboard from './pages/ClientDashboard';
 import BarberDashboard from './pages/BarberDashboard';
 
@@ -46,7 +46,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Rota padrão (Login de Clientes) */}
+        {/* Rota padrão (Login) */}
         <Route 
           path="/" 
           element={
@@ -55,19 +55,16 @@ function App() {
           } 
         />
 
-        {/* Nova Rota: Cadastro de Barbeiros (Aberto, sem login prévio) */}
-        <Route 
-          path="/barber-signup" 
-          element={!session ? <BarberSignup /> : <Navigate to="/" />} 
-        />
+        {/* CORREÇÃO AQUI: Removemos o bloqueio automático (!session) */}
+        {/* Isso permite que o código da página termine de rodar antes de sair */}
+        <Route path="/barber-signup" element={<BarberSignup />} />
         
-        {/* Área do Cliente */}
+        {/* Áreas logadas */}
         <Route 
           path="/dashboard" 
           element={session && role === 'client' ? <ClientDashboard session={session} /> : <Navigate to="/" />} 
         />
         
-        {/* Área do Barbeiro */}
         <Route 
           path="/admin" 
           element={session && role === 'barber' ? <BarberDashboard session={session} /> : <Navigate to="/" />} 
