@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       animation: {
-        blob: "blob 7s infinite",
+        blob: "blob 7s infinite",a
       },
       keyframes: {
         blob: {
