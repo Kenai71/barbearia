@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class', // <--- ESSA LINHA FAZ O BOTÃO FUNCIONAR
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       animation: {
-        blob: "blob 7s infinite",a
+        blob: "blob 7s infinite", // Removido o 'a'
       },
       keyframes: {
         blob: {
