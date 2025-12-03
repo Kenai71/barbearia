@@ -3,4 +3,4 @@ export default {
     '@tailwindcss/postcss': {},
     autoprefixer: {},
   },
-}npm install @tailwindcss/postcss
+}
