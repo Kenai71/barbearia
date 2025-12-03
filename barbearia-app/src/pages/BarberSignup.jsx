@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate, Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { User, Lock, Mail, Loader2, Scissors, ArrowLeft, Briefcase } from 'lucide-react';
 
 // Ícone do Google
@@ -18,21 +18,13 @@ export default function BarberSignup() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const navigate = useNavigate();
 
-  // Login com Google para Barbeiros
   const handleGoogleSignup = async () => {
     try {
-      // Nota: O Google não permite enviar metadados (role: barber) facilmente no login direto.
-      // O usuário será criado como 'client' pelo padrão.
-      // Você precisará mudar a role dele manualmente no banco ou criar uma tela de "completar cadastro".
-      const { error } = await supabase.auth.signInWithOAuth({
+      await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: window.location.origin + '/admin' // Tenta redirecionar para admin após login
-        }
+        options: { redirectTo: window.location.origin + '/admin' }
       });
-      if (error) throw error;
     } catch (error) {
       alert('Erro Google: ' + error.message);
     }
@@ -43,30 +35,35 @@ export default function BarberSignup() {
     setLoading(true);
 
     try {
-      // Cadastro com E-mail (Aqui conseguimos forçar o cargo 'barber')
+      // 1. Cria usuário (Trigger do banco define role 'barber' se enviarmos nos metadados)
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { 
           data: { 
             full_name: fullName,
-            role: 'barber' // <--- O SQL novo vai ler isso aqui!
+            role: 'barber' // Importante para o Trigger pegar
           } 
         }
       });
 
       if (error) throw error;
 
-      alert('Cadastro realizado! Se a confirmação de e-mail estiver ativa, verifique sua caixa de entrada.');
-      
-      // Se o login for automático (email confirmation desligado), vai pro admin
-      if (data.session) {
+      // 2. Garante a atualização manual (segurança extra caso o trigger falhe)
+      if (data.user) {
+        await supabase
+          .from('profiles')
+          .update({ role: 'barber' })
+          .eq('id', data.user.id);
+        
+        // 3. Força o redirecionamento para o Admin (Recarrega a página para o App.jsx ler a nova role)
         window.location.href = '/admin';
+      } else {
+        alert('Verifique seu e-mail para confirmar o cadastro.');
       }
 
     } catch (error) {
-      alert('Erro no cadastro: ' + error.message);
-    } finally {
+      alert('Erro: ' + error.message);
       setLoading(false);
     }
   };
@@ -179,7 +176,6 @@ export default function BarberSignup() {
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            {/* Botão Google */}
             <button 
               onClick={handleGoogleSignup}
               className="w-full flex items-center justify-center gap-3 px-6 py-3.5 border-2 border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-700 font-bold bg-white"
@@ -187,10 +183,6 @@ export default function BarberSignup() {
               <GoogleIcon />
               <span>Entrar com Google</span>
             </button>
-
-            <p className="mt-8 text-center text-slate-400 text-xs">
-              Ao criar uma conta de parceiro, você concorda com nossos termos de serviço.
-            </p>
           </div>
         </div>
       </div>

@@ -12,16 +12,20 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Verifica sessão inicial
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchRole(session.user.id);
       else setLoading(false);
     });
 
+    // Escuta mudanças de login/logout
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) fetchRole(session.user.id);
-      else {
+      if (session) {
+        // Se logou, busca a role. Se a role já existe, não busca de novo pra não piscar.
+        if (!role) fetchRole(session.user.id);
+      } else {
         setRole(null);
         setLoading(false);
       }
@@ -31,17 +35,31 @@ function App() {
   }, []);
 
   const fetchRole = async (userId) => {
-    const { data } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .single();
-    
-    setRole(data?.role);
-    setLoading(false);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single();
+      
+      if (error) throw error;
+      setRole(data?.role);
+    } catch (error) {
+      console.error("Erro ao buscar role:", error);
+      // Se der erro, tenta manter o usuário logado mas sem role definida por enquanto
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50">Carregando...</div>;
+  if (loading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4">
+        <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
+        <p className="text-sm font-medium">Carregando sistema...</p>
+      </div>
+    );
+  }
 
   return (
     <BrowserRouter>
@@ -51,12 +69,14 @@ function App() {
           path="/" 
           element={
             !session ? <Login /> : 
-            role === 'barber' ? <Navigate to="/admin" /> : <Navigate to="/dashboard" />
+            role === 'barber' ? <Navigate to="/admin" /> : 
+            role === 'client' ? <Navigate to="/dashboard" /> :
+            /* Se tem sessão mas não tem role (erro ou delay), segura aqui */
+            <div className="h-screen flex items-center justify-center">Preparando seu perfil...</div>
           } 
         />
 
-        {/* CORREÇÃO AQUI: Removemos o bloqueio automático (!session) */}
-        {/* Isso permite que o código da página termine de rodar antes de sair */}
+        {/* CORREÇÃO: Removemos o bloqueio (!session) para o cadastro não ser interrompido */}
         <Route path="/barber-signup" element={<BarberSignup />} />
         
         {/* Áreas logadas */}
