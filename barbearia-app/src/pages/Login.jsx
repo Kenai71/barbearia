@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { User, Lock, Mail, Loader2, Scissors } from 'lucide-react';
 
 // Ícone SVG colorido do Google
@@ -35,18 +35,20 @@ export default function Login() {
     setLoading(true);
     try {
       if (isRegistering) {
+        // Cadastro de CLIENTE (Padrão)
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName } }
         });
         if (error) throw error;
-        alert('Cadastro realizado! Verifique seu email ou faça login.');
+        alert('Cadastro de cliente realizado! Verifique seu email ou faça login.');
         setIsRegistering(false);
       } else {
+        // Login (Funciona para ambos, o App.jsx redireciona)
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate('/dashboard');
+        navigate('/'); // O redirecionamento é automático no App.jsx
       }
     } catch (error) {
       alert(error.message);
@@ -59,7 +61,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 md:p-6">
       <div className="flex w-full max-w-5xl bg-white rounded-[2rem] shadow-xl overflow-hidden min-h-[600px] md:min-h-[700px] border border-slate-200">
         
-        {/* LADO ESQUERDO: Placeholder Azul Claro */}
+        {/* LADO ESQUERDO */}
         <div className="hidden md:flex w-1/2 bg-gradient-to-br from-blue-50 to-blue-200 relative items-center justify-center p-12">
           <div className="absolute top-0 left-0 w-full h-full overflow-hidden opacity-50">
               <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-300 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
@@ -76,7 +78,7 @@ export default function Login() {
             
             <div className="mt-12">
               <h2 className="text-4xl lg:text-5xl font-extrabold mb-6 leading-tight text-blue-900">
-                O estilo que <br/>você merece.
+                {isRegistering ? 'Junte-se a nós.' : 'O estilo que \n você merece.'}
               </h2>
               <p className="text-blue-700 text-lg leading-relaxed max-w-md">
                 Agende seu horário com os melhores profissionais da cidade. Rápido, fácil e no seu tempo.
@@ -89,16 +91,16 @@ export default function Login() {
           </div>
         </div>
 
-        {/* LADO DIREITO: Formulário Clean */}
+        {/* LADO DIREITO */}
         <div className="w-full md:w-1/2 p-8 sm:p-12 md:p-16 flex flex-col justify-center bg-white">
           <div className="max-w-md mx-auto w-full">
             
             <div className="mb-10">
               <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">
-                {isRegistering ? 'Crie sua conta' : 'Bem-vindo de volta'}
+                {isRegistering ? 'Criar Conta Cliente' : 'Bem-vindo de volta'}
               </h1>
               <p className="text-slate-500 text-base">
-                {isRegistering ? 'Preencha seus dados para começar sua jornada.' : 'Insira suas credenciais para acessar o painel.'}
+                {isRegistering ? 'Cadastre-se para agendar seus cortes.' : 'Insira suas credenciais para acessar.'}
               </p>
             </div>
 
@@ -146,7 +148,7 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4"
               >
-                {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Criar Conta Grátis' : 'Entrar na Conta')}
+                {loading ? <Loader2 className="animate-spin" /> : (isRegistering ? 'Cadastrar como Cliente' : 'Entrar na Conta')}
               </button>
             </form>
 
@@ -156,7 +158,6 @@ export default function Login() {
               <div className="flex-grow border-t border-slate-200"></div>
             </div>
 
-            {/* Botão Google com Logo Colorida */}
             <button 
               onClick={handleGoogleLogin}
               className="w-full flex items-center justify-center gap-3 px-6 py-3.5 border-2 border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all text-slate-700 font-bold bg-white"
@@ -174,6 +175,14 @@ export default function Login() {
                 {isRegistering ? 'Fazer Login' : 'Cadastre-se agora'}
               </button>
             </p>
+            
+            {/* LINK PARA CADASTRO DE BARBEIRO */}
+            <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+              <Link to="/barber-signup" className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-wide">
+                É um profissional? Cadastre-se aqui
+              </Link>
+            </div>
+
           </div>
         </div>
       </div>

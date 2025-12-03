@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { supabase } from './supabaseClient';
 import Login from './pages/Login';
+import BarberSignup from './pages/BarberSignup'; // Importe a nova página
 import ClientDashboard from './pages/ClientDashboard';
 import BarberDashboard from './pages/BarberDashboard';
 
@@ -11,14 +12,12 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Verifica sessão atual
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) fetchRole(session.user.id);
       else setLoading(false);
     });
 
-    // 2. Ouve mudanças no Login (Login/Logout)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) fetchRole(session.user.id);
@@ -42,11 +41,12 @@ function App() {
     setLoading(false);
   };
 
-  if (loading) return <div className="h-screen flex items-center justify-center">Carregando...</div>;
+  if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50">Carregando...</div>;
 
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rota padrão (Login de Clientes) */}
         <Route 
           path="/" 
           element={
@@ -54,12 +54,20 @@ function App() {
             role === 'barber' ? <Navigate to="/admin" /> : <Navigate to="/dashboard" />
           } 
         />
+
+        {/* Nova Rota: Cadastro de Barbeiros (Aberto, sem login prévio) */}
+        <Route 
+          path="/barber-signup" 
+          element={!session ? <BarberSignup /> : <Navigate to="/" />} 
+        />
         
+        {/* Área do Cliente */}
         <Route 
           path="/dashboard" 
           element={session && role === 'client' ? <ClientDashboard session={session} /> : <Navigate to="/" />} 
         />
         
+        {/* Área do Barbeiro */}
         <Route 
           path="/admin" 
           element={session && role === 'barber' ? <BarberDashboard session={session} /> : <Navigate to="/" />} 
