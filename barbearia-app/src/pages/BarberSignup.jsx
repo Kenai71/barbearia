@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Link } from 'react-router-dom';
-import { User, Lock, Mail, Loader2, Scissors, ArrowLeft, Briefcase } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom'; // Adicionado useNavigate
+import { User, Lock, Mail, Loader2, Scissors, ArrowLeft, Briefcase, CheckCircle } from 'lucide-react';
 
 // Ícone do Google
 const GoogleIcon = () => (
@@ -17,7 +17,9 @@ export default function BarberSignup() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState(''); // Novo estado
   const [fullName, setFullName] = useState('');
+  const navigate = useNavigate(); // Hook para redirecionar
 
   const handleGoogleSignup = async () => {
     try {
@@ -32,38 +34,44 @@ export default function BarberSignup() {
 
   const handleSignup = async (e) => {
     e.preventDefault();
+    
+    // 1. Validação de Senhas
+    if (password !== confirmPassword) {
+      alert('As senhas não conferem! Por favor, verifique.');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // 1. Cria usuário (Trigger do banco define role 'barber' se enviarmos nos metadados)
+      // 2. Cria usuário
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { 
           data: { 
             full_name: fullName,
-            role: 'barber' // Importante para o Trigger pegar
+            role: 'barber' // Trigger no banco vai pegar isso e criar o perfil
           } 
         }
       });
 
       if (error) throw error;
 
-      // 2. Garante a atualização manual (segurança extra caso o trigger falhe)
-      if (data.user) {
-        await supabase
-          .from('profiles')
-          .update({ role: 'barber' })
-          .eq('id', data.user.id);
-        
-        // 3. Força o redirecionamento para o Admin (Recarrega a página para o App.jsx ler a nova role)
-        window.location.href = '/admin';
-      } else {
-        alert('Verifique seu e-mail para confirmar o cadastro.');
+      // 3. Login direto e Redirecionamento
+      if (data.session) {
+        // Se o Supabase retornou uma sessão (Email confirmation OFF), redireciona já.
+        alert('Cadastro realizado com sucesso! Bem-vindo.');
+        navigate('/admin'); 
+      } else if (data.user) {
+        // Se o Supabase exige confirmação de email
+        alert('Cadastro realizado! Verifique seu e-mail para confirmar a conta antes de entrar.');
+        navigate('/'); // Manda pro login
       }
 
     } catch (error) {
-      alert('Erro: ' + error.message);
+      alert('Erro ao cadastrar: ' + error.message);
+    } finally {
       setLoading(false);
     }
   };
@@ -114,7 +122,7 @@ export default function BarberSignup() {
 
           <div className="max-w-md mx-auto w-full mt-10 md:mt-0">
             
-            <div className="mb-10">
+            <div className="mb-8">
               <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">
                 Cadastro de Barbeiro
               </h1>
@@ -123,7 +131,7 @@ export default function BarberSignup() {
               </p>
             </div>
 
-            <form onSubmit={handleSignup} className="space-y-5">
+            <form onSubmit={handleSignup} className="space-y-4">
               
               <div className="relative group">
                 <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
@@ -149,16 +157,30 @@ export default function BarberSignup() {
                 />
               </div>
 
-              <div className="relative group">
-                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
-                <input
-                  type="password"
-                  placeholder="Senha segura"
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <input
+                    type="password"
+                    placeholder="Senha"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="relative group">
+                  <CheckCircle className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <input
+                    type="password"
+                    placeholder="Confirmar"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                  />
+                </div>
               </div>
 
               <button 
@@ -166,11 +188,11 @@ export default function BarberSignup() {
                 disabled={loading}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl transition-all duration-300 transform hover:-translate-y-0.5 shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2 mt-4"
               >
-                {loading ? <Loader2 className="animate-spin" /> : 'Cadastrar-se como Profissional'}
+                {loading ? <Loader2 className="animate-spin" /> : 'Cadastrar e Entrar'}
               </button>
             </form>
 
-            <div className="flex items-center my-8">
+            <div className="flex items-center my-6">
               <div className="flex-grow border-t border-slate-200"></div>
               <span className="mx-4 text-slate-400 text-sm font-medium lowercase">ou</span>
               <div className="flex-grow border-t border-slate-200"></div>
