@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@supabase/supabase-js": "^2.86.0",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^0.555.0",
+    "react-router-dom": "^7.10.0"
+  }
+}

@@ -1,26 +1,28 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Configuração base para o estilo Clean */
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply bg-slate-50 text-slate-800 antialiased;
+  font-family: 'Inter', sans-serif;
   margin: 0;
   padding: 0;
   min-height: 100vh;
 }
 
-/* Opcional: Estilo suave para a barra de rolagem */
-::-webkit-scrollbar {
-  width: 8px;
+/* Efeito de Vidro (Glassmorphism) */
+.glass {
+  @apply bg-white/80 backdrop-blur-md border border-white/40 shadow-xl;
 }
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
+
+/* Input Bonito */
+.input-field {
+  @apply w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 transition-all duration-200;
 }
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+
+/* Botão Premium */
+.btn-primary {
+  @apply w-full bg-slate-900 text-white py-3 rounded-xl hover:bg-slate-800 transform hover:-translate-y-0.5 transition-all duration-200 font-medium shadow-lg shadow-slate-900/20 disabled:opacity-50 disabled:cursor-not-allowed;
 }
