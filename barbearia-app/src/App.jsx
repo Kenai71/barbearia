@@ -10,15 +10,21 @@ function App() {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   useEffect(() => {
     // 1. Verifica sessão inicial ao carregar a página
     const initSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setSession(session);
-      if (session) {
-        await fetchRole(session.user.id);
-      } else {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        if (session) {
+          await fetchRole(session.user.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Erro na sessão:", error);
         setLoading(false);
       }
     };
@@ -28,8 +34,8 @@ function App() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       if (session) {
-        // Se logou, ativa o loading e busca a role imediatamente
         setLoading(true);
+        setErrorMsg(null);
         await fetchRole(session.user.id);
       } else {
         setRole(null);
@@ -40,11 +46,10 @@ function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Lógica de "Retry" (Tentar Novamente) para buscar o Perfil
-  // Garante que o sistema espere o Trigger do banco criar o perfil antes de desistir
+  // Lógica de "Retry" melhorada
   const fetchRole = async (userId) => {
     let attempts = 0;
-    const maxAttempts = 10; // Tenta por 5 segundos (10 vezes de 0.5s)
+    const maxAttempts = 10; 
 
     while (attempts < maxAttempts) {
       const { data, error } = await supabase
@@ -53,19 +58,21 @@ function App() {
         .eq('id', userId)
         .single();
       
-      if (data && data.role) {
+      // Correção aqui: removido o erro de digitação
+      if (!error && data && data.role) {
         setRole(data.role);
-        setLoading(false); // Sucesso! Sai da função e libera a tela.
+        setLoading(false);
         return; 
       }
 
-      // Se falhou, espera 500ms e tenta de novo
+      // Espera 500ms antes de tentar de novo
       await new Promise(resolve => setTimeout(resolve, 500));
       attempts++;
     }
 
-    // Se falhou todas as vezes
+    // Se falhou todas as vezes, mostra erro ao invés de travar
     console.error("Não foi possível carregar o perfil do usuário.");
+    setErrorMsg("Não foi possível carregar seu perfil. O sistema pode estar lento.");
     setLoading(false); 
   };
 
@@ -73,9 +80,23 @@ function App() {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4">
         <div className="w-8 h-8 border-4 border-slate-300 border-t-blue-600 rounded-full animate-spin"></div>
-        <p className="text-sm font-medium">Acessando sistema...</p>
+        <p className="text-sm font-medium">Conectando...</p>
       </div>
     );
+  }
+
+  // Tela de erro caso o perfil não carregue
+  if (session && errorMsg) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-4 p-6 text-center">
+        <h2 className="text-xl font-bold text-slate-900">Ops!</h2>
+        <p>{errorMsg}</p>
+        <div className="flex gap-4">
+          <button onClick={() => window.location.reload()} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-bold">Tentar Novamente</button>
+          <button onClick={() => supabase.auth.signOut()} className="px-4 py-2 border border-slate-300 rounded-lg">Sair</button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -88,8 +109,8 @@ function App() {
             !session ? <Login /> : 
             role === 'barber' ? <Navigate to="/admin" /> : 
             role === 'client' ? <Navigate to="/dashboard" /> :
-            // Fallback: Se tem sessão mas falhou em achar a role, volta pro Login
-            <Navigate to="/" onClick={() => supabase.auth.signOut()} /> 
+            // Fallback final
+            <div className="h-screen flex items-center justify-center">Carregando permissões...</div>
           } 
         />
 

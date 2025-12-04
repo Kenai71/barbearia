@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Calendar, Clock, LogOut, Scissors, User, MapPin, CheckCircle, Hourglass, Moon, Sun, Trash2, AlertTriangle, X } from 'lucide-react';
-import { format, differenceInHours, isBefore, parseISO } from 'date-fns';
+import { Clock, LogOut, Scissors, User, Trash2, AlertTriangle, Calendar as CalendarIcon, Moon, Sun, ChevronRight } from 'lucide-react';
+import { format, differenceInHours, parseISO, addMinutes, setHours, setMinutes, isBefore } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export default function ClientDashboard({ session }) {
@@ -12,22 +12,14 @@ export default function ClientDashboard({ session }) {
   const [occupiedSlots, setOccupiedSlots] = useState([]);
   const [loading, setLoading] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [generatedSlots, setGeneratedSlots] = useState([]);
 
-  // Modal de Cancelamento
+  // Modal Cancelamento
   const [showModal, setShowModal] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState(null);
-  
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
 
-  // Gera horários: 09:00 as 19:00 (30 em 30 min)
-  const timeSlots = [];
-  for (let i = 9; i < 19; i++) {
-    timeSlots.push(`${i.toString().padStart(2, '0')}:00`);
-    timeSlots.push(`${i.toString().padStart(2, '0')}:30`);
-  }
-  timeSlots.push('19:00');
-
-  // Configuração do Tema
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
@@ -38,16 +30,17 @@ export default function ClientDashboard({ session }) {
     }
   }, [darkMode]);
 
-  // Carrega dados iniciais
+  // Carrega dados iniciais e configurações
   useEffect(() => {
     const fetchData = async () => {
-      // Perfil do usuário
       const { data: user } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
       setProfile(user);
 
-      // Lista de Barbeiros
       const { data: barberList } = await supabase.from('profiles').select('*').eq('role', 'barber');
       setBarbers(barberList || []);
+
+      const { data: config } = await supabase.from('barbershop_settings').select('*').single();
+      setSettings(config);
       
       fetchMyAppointments();
     };
@@ -57,13 +50,41 @@ export default function ClientDashboard({ session }) {
   const fetchMyAppointments = async () => {
     const { data } = await supabase
       .from('appointments')
-      .select('*, profiles:barber_id(full_name)') // Traz o nome do barbeiro
+      .select('*, profiles:barber_id(full_name)')
       .eq('client_id', session.user.id)
       .order('date_time', { ascending: true });
     setMyAppointments(data || []);
   };
 
-  // Busca horários ocupados do barbeiro específico
+  // Gera slots baseado nas configurações
+  useEffect(() => {
+    if (!settings || !date) return;
+
+    const selectedDate = parseISO(date);
+    const dayOfWeek = selectedDate.getDay(); // 0 = Dom, 1 = Seg
+
+    // Verifica se a barbearia abre neste dia
+    if (!settings.work_days.includes(dayOfWeek)) {
+      setGeneratedSlots([]); // Fecha a agenda
+      return;
+    }
+
+    const slots = [];
+    const [openHour, openMinute] = settings.opening_time.split(':');
+    const [closeHour, closeMinute] = settings.closing_time.split(':');
+
+    let currentTime = setMinutes(setHours(selectedDate, parseInt(openHour)), parseInt(openMinute));
+    const endTime = setMinutes(setHours(selectedDate, parseInt(closeHour)), parseInt(closeMinute));
+
+    while (isBefore(currentTime, endTime)) {
+      slots.push(format(currentTime, 'HH:mm'));
+      currentTime = addMinutes(currentTime, 30); // Intervalo de 30 min fixo por enquanto
+    }
+    setGeneratedSlots(slots);
+
+  }, [date, settings]);
+
+  // Busca ocupados
   useEffect(() => {
     const fetchSlots = async () => {
       if (!date || !selectedBarber) return;
@@ -74,7 +95,7 @@ export default function ClientDashboard({ session }) {
       const { data } = await supabase
         .from('appointments')
         .select('date_time')
-        .eq('barber_id', selectedBarber) // Filtra pelo barbeiro
+        .eq('barber_id', selectedBarber)
         .gte('date_time', start)
         .lte('date_time', end);
 
@@ -89,7 +110,6 @@ export default function ClientDashboard({ session }) {
 
   const handleBook = async (time) => {
     if (!selectedBarber) return alert('Selecione um barbeiro.');
-    if (!date) return alert('Selecione uma data.');
     
     setLoading(true);
     const dateTime = new Date(`${date}T${time}:00`);
@@ -107,91 +127,65 @@ export default function ClientDashboard({ session }) {
     else {
       alert('Agendado com sucesso!');
       fetchMyAppointments();
-      // Recarrega os slots para bloquear o que acabou de ser agendado
-      const newOccupied = [...occupiedSlots, time];
-      setOccupiedSlots(newOccupied);
+      setOccupiedSlots([...occupiedSlots, time]);
     }
     setLoading(false);
   };
 
-  // Tenta cancelar (Verifica regra de 5h)
   const requestCancel = (appointment) => {
     const appDate = new Date(appointment.date_time);
     const now = new Date();
     const hoursLeft = differenceInHours(appDate, now);
 
     if (hoursLeft < 5) {
-      alert(`Não é possível cancelar. Faltam apenas ${hoursLeft} horas para o corte (mínimo 5h).`);
+      alert(`Não é possível cancelar em cima da hora. Faltam ${hoursLeft} horas.`);
       return;
     }
-
     setAppointmentToCancel(appointment);
     setShowModal(true);
   };
 
-  // Confirma cancelamento
   const confirmCancel = async () => {
     if (!appointmentToCancel) return;
-
-    const { error } = await supabase.from('appointments').delete().eq('id', appointmentToCancel.id);
-    
-    if (error) alert('Erro ao cancelar.');
-    else {
-      fetchMyAppointments();
-      // Se o cancelamento for no dia que estou vendo, libera o horário visualmente
-      if (date && selectedBarber && appointmentToCancel.barber_id === selectedBarber) {
-         const time = format(new Date(appointmentToCancel.date_time), 'HH:mm');
-         setOccupiedSlots(prev => prev.filter(t => t !== time));
-      }
+    await supabase.from('appointments').delete().eq('id', appointmentToCancel.id);
+    fetchMyAppointments();
+    if (date && selectedBarber && appointmentToCancel.barber_id === selectedBarber) {
+       const time = format(new Date(appointmentToCancel.date_time), 'HH:mm');
+       setOccupiedSlots(prev => prev.filter(t => t !== time));
     }
     setShowModal(false);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans relative">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300 font-sans">
       
-      {/* MODAL DE CANCELAMENTO */}
+      {/* Modal Cancelamento */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center border border-slate-200 dark:border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center border dark:border-slate-700">
             <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={28} />
             </div>
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Cancelar Agendamento?</h3>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
-              O horário será liberado para outros clientes. Essa ação é irreversível.
-            </p>
+            <h3 className="text-xl font-bold dark:text-white mb-2">Cancelar?</h3>
+            <p className="text-slate-500 mb-6 text-sm">Essa ação liberará o horário para outros clientes.</p>
             <div className="flex gap-3">
-              <button 
-                onClick={() => setShowModal(false)}
-                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-white font-medium hover:bg-slate-200 transition-colors"
-              >
-                Voltar
-              </button>
-              <button 
-                onClick={confirmCancel}
-                className="flex-1 py-3 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors shadow-lg shadow-red-600/20"
-              >
-                Sim, Cancelar
-              </button>
+              <button onClick={() => setShowModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold">Voltar</button>
+              <button onClick={confirmCancel} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-600/20">Sim, Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
       {/* Navbar */}
-      <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm">
+      <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm/50 backdrop-blur-md bg-white/80 dark:bg-slate-800/80">
         <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl">
+          <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
             <Scissors className="text-blue-600" /> BarberPro
           </div>
           <div className="flex items-center gap-4">
             <button onClick={() => setDarkMode(!darkMode)} className="p-2 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-yellow-400">
               {darkMode ? <Sun size={20} /> : <Moon size={20} />}
             </button>
-            <div className="hidden md:block text-right">
-              <p className="text-sm font-bold text-slate-900 dark:text-white">{profile?.full_name}</p>
-            </div>
             <button onClick={() => supabase.auth.signOut()} className="text-slate-400 hover:text-red-500"><LogOut size={20} /></button>
           </div>
         </div>
@@ -200,73 +194,83 @@ export default function ClientDashboard({ session }) {
       <main className="max-w-6xl mx-auto p-6 py-8">
         <div className="grid lg:grid-cols-3 gap-8">
           
-          {/* AGENDAMENTO */}
-          <div className="lg:col-span-2 space-y-6">
-            <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Novo Agendamento</h2>
+          {/* PAINEL DE AGENDAMENTO */}
+          <div className="lg:col-span-2 space-y-8">
+            <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-2">
+                <CalendarIcon className="text-blue-600" /> Novo Agendamento
+              </h2>
               
               {/* 1. Barbeiros */}
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">1. Escolha o Profissional</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="mb-8">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">1. Profissional</label>
+                <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar">
                   {barbers.map(barber => (
                     <button
                       key={barber.id}
                       onClick={() => setSelectedBarber(barber.id)}
-                      className={`p-4 rounded-xl border-2 text-left transition-all
+                      className={`min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
                         ${selectedBarber === barber.id 
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500' 
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-400'}`}
+                          : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-blue-300'}`}
                     >
-                      <span className="block font-bold text-slate-900 dark:text-white">{barber.full_name}</span>
-                      <span className="text-xs text-slate-500">Barbeiro</span>
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm transition-colors
+                        ${selectedBarber === barber.id ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 text-slate-400'}`}>
+                        {barber.full_name.charAt(0)}
+                      </div>
+                      <span className="font-bold text-slate-900 dark:text-white text-sm truncate w-full text-center">{barber.full_name}</span>
+                      {selectedBarber === barber.id && <div className="absolute top-2 right-2 w-3 h-3 bg-blue-600 rounded-full"></div>}
                     </button>
                   ))}
                 </div>
-                {barbers.length === 0 && <p className="text-slate-500 text-sm">Nenhum barbeiro disponível.</p>}
               </div>
 
-              {/* 2. Data e Horários (Só aparece se escolheu barbeiro) */}
-              <div className={`space-y-6 transition-opacity duration-500 ${!selectedBarber ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">2. Escolha a Data</label>
+              {/* 2. Data */}
+              <div className={`mb-8 transition-opacity duration-500 ${!selectedBarber ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">2. Data</label>
+                <div className="relative">
                   <input 
                     type="date" 
-                    className="w-full p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl dark:text-white dark:calendar-invert outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full p-4 pl-12 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-xl dark:text-white font-bold outline-none focus:border-blue-500 transition-all cursor-pointer"
                     onChange={(e) => setDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
                   />
+                  <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={20} />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-3">3. Escolha o Horário</label>
-                  {!date ? (
-                    <div className="p-6 text-center border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-slate-400">
-                      Selecione uma data primeiro.
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                      {timeSlots.map(time => {
-                        const isTaken = occupiedSlots.includes(time);
-                        return (
-                          <button
-                            key={time}
-                            disabled={loading || isTaken}
-                            onClick={() => handleBook(time)}
-                            className={`
-                              py-2 px-2 rounded-lg text-sm font-bold transition-all border
-                              ${isTaken 
-                                ? 'bg-slate-100 dark:bg-slate-800 border-slate-200 text-slate-400 cursor-not-allowed line-through opacity-70' 
-                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-white hover:bg-slate-900 dark:hover:bg-blue-600 hover:text-white hover:border-slate-900'
-                              }
-                            `}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+              {/* 3. Horários (Visual Melhorado) */}
+              <div className={`transition-opacity duration-500 ${!date ? 'opacity-40 pointer-events-none' : 'opacity-100'}`}>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">3. Horário Disponível</label>
+                
+                {generatedSlots.length === 0 ? (
+                  <div className="p-8 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-center">
+                    <p className="text-slate-500 font-medium">A barbearia está fechada neste dia ou você não selecionou uma data.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {generatedSlots.map(time => {
+                      const isTaken = occupiedSlots.includes(time);
+                      return (
+                        <button
+                          key={time}
+                          disabled={loading || isTaken}
+                          onClick={() => handleBook(time)}
+                          className={`
+                            py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden
+                            ${isTaken 
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed border border-transparent' 
+                              : 'bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-blue-500 hover:text-blue-600 hover:shadow-lg hover:shadow-blue-500/10 active:scale-95'
+                            }
+                          `}
+                        >
+                          {time}
+                          {isTaken && <div className="absolute inset-0 flex items-center justify-center bg-slate-100/50 dark:bg-slate-800/50 backdrop-blur-[1px]"><XIcon size={16}/></div>}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>
@@ -274,37 +278,46 @@ export default function ClientDashboard({ session }) {
 
           {/* MEUS AGENDAMENTOS */}
           <div className="lg:col-span-1">
-            <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 h-full">
-              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Seus Cortes</h3>
-              <div className="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
-                {myAppointments.length === 0 && <p className="text-slate-400 text-center py-8">Nenhum agendamento.</p>}
+            <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 h-fit sticky top-24">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-6 flex items-center justify-between">
+                Seus Cortes
+                <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">{myAppointments.length}</span>
+              </h3>
+              
+              <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
+                {myAppointments.length === 0 && <p className="text-slate-400 text-center py-8 text-sm">Você ainda não tem cortes agendados.</p>}
                 
                 {myAppointments.map(app => (
-                  <div key={app.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-750 border border-slate-100 dark:border-slate-700">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <span className="block text-xl font-bold text-slate-900 dark:text-white">
-                          {format(new Date(app.date_time), 'dd/MM')}
+                  <div key={app.id} className="group relative bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 hover:border-blue-200 transition-all">
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="bg-white dark:bg-slate-800 p-2 rounded-xl shadow-sm">
+                        <span className="block text-lg font-bold text-slate-900 dark:text-white text-center leading-none">
+                          {format(new Date(app.date_time), 'dd')}
                         </span>
-                        <span className="text-xs text-slate-500 uppercase font-bold">
-                          {format(new Date(app.date_time), 'EEEE', { locale: ptBR })}
+                        <span className="text-[10px] text-slate-500 uppercase font-bold text-center block mt-1">
+                          {format(new Date(app.date_time), 'MMM', { locale: ptBR })}
                         </span>
                       </div>
-                      <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${app.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'}`}>
-                        {app.status === 'pending' ? 'Pendente' : 'Confirmado'}
-                      </span>
+                      <div className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide
+                        ${app.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                        {app.status === 'pending' ? 'Aguardando' : 'Confirmado'}
+                      </div>
                     </div>
                     
-                    <div className="text-sm text-slate-600 dark:text-slate-300 space-y-1 mb-3">
-                      <div className="flex items-center gap-2"><Clock size={14}/> {format(new Date(app.date_time), 'HH:mm')}</div>
-                      <div className="flex items-center gap-2"><User size={14}/> {app.profiles?.full_name || 'Barbeiro'}</div>
+                    <div className="mb-4">
+                      <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-bold text-sm mb-1">
+                        <Clock size={14} className="text-blue-500"/> {format(new Date(app.date_time), 'HH:mm')}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-500 text-xs">
+                        <User size={14} /> {app.profiles?.full_name}
+                      </div>
                     </div>
 
                     <button 
                       onClick={() => requestCancel(app)}
-                      className="w-full py-2 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-900/20 text-xs font-bold flex items-center justify-center gap-2 transition-colors"
+                      className="w-full py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-red-500 hover:border-red-200 text-xs font-bold transition-all flex items-center justify-center gap-2 group-hover:bg-red-50 dark:group-hover:bg-red-900/10 group-hover:border-red-200"
                     >
-                      <Trash2 size={14} /> Cancelar
+                      <Trash2 size={14} /> Cancelar Agendamento
                     </button>
                   </div>
                 ))}
@@ -317,3 +330,9 @@ export default function ClientDashboard({ session }) {
     </div>
   );
 }
+
+const XIcon = ({size}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 6 6 18"/><path d="m6 6 12 12"/>
+  </svg>
+)

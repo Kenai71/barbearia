@@ -1,6 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  darkMode: 'class',
+  darkMode: 'selector', // <--- MUDANÇA IMPORTANTE: de 'class' para 'selector'
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -8,7 +8,7 @@ export default {
   theme: {
     extend: {
       animation: {
-        blob: "blob 7s infinite", // Removido o 'a'
+        blob: "blob 7s infinite",
       },
       keyframes: {
         blob: {
