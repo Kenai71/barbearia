@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate, Link } from 'react-router-dom';
-import { User, Lock, Mail, Loader2, Scissors, CheckCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Lock, Mail, Loader2, Scissors, ArrowRight, KeyRound } from 'lucide-react';
 
-// Ícone SVG colorido do Google
 const GoogleIcon = () => (
   <svg className="w-5 h-5" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -16,9 +15,10 @@ const GoogleIcon = () => (
 export default function Login() {
   const [loading, setLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
+  const [showForgotPass, setShowForgotPass] = useState(false); // Modal Esqueci Senha
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState(''); // Novo campo
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const navigate = useNavigate();
 
@@ -33,8 +33,6 @@ export default function Login() {
 
   const handleAuth = async (e) => {
     e.preventDefault();
-    
-    // Validação de senha
     if (isRegistering && password !== confirmPassword) {
       alert('As senhas não conferem!');
       return;
@@ -43,28 +41,22 @@ export default function Login() {
     setLoading(true);
     try {
       if (isRegistering) {
-        // Cadastro de CLIENTE (Padrão)
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: { data: { full_name: fullName } }
         });
         if (error) throw error;
-
-        // Se o login for automático (sem confirmar email), o App.jsx vai pegar a sessão
-        // Se precisar confirmar, avisamos:
         if (!data.session) {
           alert('Cadastro realizado! Verifique seu email para confirmar.');
           setIsRegistering(false);
         } else {
-          // Redireciona forçado para garantir (App.jsx cuidaria disso também)
           navigate('/');
         }
       } else {
-        // Login
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        navigate('/'); // O App.jsx vai redirecionar pro Dashboard
+        navigate('/');
       }
     } catch (error) {
       alert(error.message);
@@ -73,8 +65,55 @@ export default function Login() {
     }
   };
 
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + '/',
+      });
+      if (error) throw error;
+      alert('Link de recuperação enviado para o seu e-mail!');
+      setShowForgotPass(false);
+    } catch (error) {
+      alert('Erro: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 md:p-6">
+    <div className="min-h-screen flex items-center justify-center bg-slate-100 p-4 md:p-6 font-sans">
+      
+      {/* MODAL ESQUECI A SENHA */}
+      {showForgotPass && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 relative">
+            <button onClick={() => setShowForgotPass(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500">✕</button>
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                <KeyRound size={24} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900">Recuperar Senha</h3>
+              <p className="text-sm text-slate-500">Digite seu e-mail para receber o link.</p>
+            </div>
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <input
+                type="email"
+                placeholder="seu@email.com"
+                className="w-full p-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold transition">
+                {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Enviar Link'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="flex w-full max-w-5xl bg-white rounded-[2rem] shadow-xl overflow-hidden min-h-[600px] md:min-h-[700px] border border-slate-200">
         
         {/* LADO ESQUERDO */}
@@ -89,7 +128,7 @@ export default function Login() {
               <div className="bg-white/60 p-2.5 rounded-xl backdrop-blur-md shadow-sm">
                 <Scissors size={28} className="text-blue-700" />
               </div>
-              <span className="font-bold text-xl tracking-widest uppercase">BarberPro</span>
+              <span className="font-bold text-xl tracking-widest uppercase">RaulBarber</span>
             </div>
             
             <div className="mt-12">
@@ -102,7 +141,7 @@ export default function Login() {
             </div>
 
             <div className="text-blue-600 text-sm font-medium mt-auto">
-              © 2025 BarberPro. Todos os direitos reservados.
+              © 2025 RaulBarber. Todos os direitos reservados.
             </div>
           </div>
         </div>
@@ -147,21 +186,30 @@ export default function Login() {
                 />
               </div>
 
-              <div className="relative group">
-                <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
-                <input
-                  type="password"
-                  placeholder="Senha"
-                  className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
+              <div>
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <input
+                    type="password"
+                    placeholder="Senha"
+                    className="w-full pl-12 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white transition-all font-medium text-slate-700"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </div>
+                {!isRegistering && (
+                  <div className="text-right mt-2">
+                    <button type="button" onClick={() => setShowForgotPass(true)} className="text-sm text-blue-600 font-semibold hover:underline">
+                      Esqueci a senha
+                    </button>
+                  </div>
+                )}
               </div>
 
               {isRegistering && (
                 <div className="relative group">
-                  <CheckCircle className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
+                  <User className="absolute left-4 top-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" size={20} />
                   <input
                     type="password"
                     placeholder="Confirmar Senha"
@@ -205,13 +253,6 @@ export default function Login() {
                 {isRegistering ? 'Fazer Login' : 'Cadastre-se agora'}
               </button>
             </p>
-            
-            {/* LINK PARA CADASTRO DE BARBEIRO */}
-            <div className="mt-6 pt-6 border-t border-slate-100 text-center">
-              <Link to="/barber-signup" className="text-xs font-semibold text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-wide">
-                É um profissional? Cadastre-se aqui
-              </Link>
-            </div>
 
           </div>
         </div>

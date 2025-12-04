@@ -1,24 +1,22 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { Save, ArrowLeft, Clock, Calendar } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Save, ArrowLeft, ChevronLeft, ChevronRight, X, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { 
+  format, startOfMonth, endOfMonth, eachDayOfInterval, 
+  addMonths, subMonths, getDay, isToday, parseISO 
+} from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
-  const [openingTime, setOpeningTime] = useState('09:00');
-  const [closingTime, setClosingTime] = useState('19:00');
-  const [workDays, setWorkDays] = useState([]);
-  const navigate = useNavigate();
-
-  const daysOfWeek = [
-    { id: 0, label: 'Domingo' },
-    { id: 1, label: 'Segunda' },
-    { id: 2, label: 'Terça' },
-    { id: 3, label: 'Quarta' },
-    { id: 4, label: 'Quinta' },
-    { id: 5, label: 'Sexta' },
-    { id: 6, label: 'Sábado' },
-  ];
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  
+  const [schedule, setSchedule] = useState({}); // Regra Geral (Dom-Sab)
+  const [overrides, setOverrides] = useState({}); // Regra Específica (Datas)
+  
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [modalConfig, setModalConfig] = useState({ active: true, start: '09:00', end: '19:00' });
 
   useEffect(() => {
     fetchSettings();
@@ -28,181 +26,202 @@ export default function AdminSettings() {
     try {
       const { data, error } = await supabase
         .from('barbershop_settings')
-        .select('*')
-        .maybeSingle(); // maybeSingle não dá erro se não tiver dados
+        .select('schedule, date_overrides')
+        .maybeSingle();
 
       if (error) throw error;
-
       if (data) {
-        setOpeningTime(data.opening_time.slice(0, 5));
-        setClosingTime(data.closing_time.slice(0, 5));
-        setWorkDays(data.work_days || []);
-      } else {
-        // Se não existir configuração, cria uma padrão na hora (Auto-fix)
-        await createDefaultSettings();
+        setSchedule(data.schedule || {});
+        setOverrides(data.date_overrides || {});
       }
     } catch (error) {
-      alert('Erro ao carregar configurações: ' + error.message);
+      alert('Erro: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const createDefaultSettings = async () => {
-    const defaultDays = [1, 2, 3, 4, 5, 6];
-    const { error } = await supabase
-      .from('barbershop_settings')
-      .insert([{ opening_time: '09:00', closing_time: '19:00', work_days: defaultDays }]);
+  const getDayConfig = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
     
-    if (!error) {
-      setWorkDays(defaultDays);
+    // 1. Se tiver override (data específica), usa ele (PRIORIDADE MÁXIMA)
+    if (overrides[dateKey]) {
+      return { ...overrides[dateKey], isOverride: true };
     }
+    
+    // 2. Se não, usa a regra da semana
+    const dayOfWeek = getDay(date);
+    return { ...schedule[dayOfWeek], isOverride: false };
   };
 
-  const toggleDay = (dayId) => {
-    if (workDays.includes(dayId)) {
-      setWorkDays(workDays.filter(d => d !== dayId));
-    } else {
-      setWorkDays([...workDays, dayId].sort());
-    }
+  const handleDayClick = (date) => {
+    const config = getDayConfig(date);
+    setSelectedDate(date);
+    setModalConfig({
+      active: config.active,
+      start: config.start || '09:00',
+      end: config.end || '19:00'
+    });
   };
 
-  const handleSave = async () => {
-    setLoading(true);
+  const handleSaveDayConfig = async () => {
+    if (!selectedDate) return;
+    
+    // Usa a data completa (ex: 2025-12-25) como chave. Isso garante que só afeta ESSE dia.
+    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+    const newOverrides = { ...overrides, [dateKey]: modalConfig };
+
+    setOverrides(newOverrides);
+    
     try {
-      // Tenta atualizar. Se não existir id=1 (improvável com a correção acima, mas seguro), não faz nada.
-      // O ideal é buscar o ID primeiro, mas vamos assumir que existe apenas 1 linha.
-      // Vamos usar uma estratégia de Upsert sem ID fixo para ser mais seguro.
-      
-      // 1. Busca qualquer ID existente
-      const { data: existing } = await supabase.from('barbershop_settings').select('id').limit(1).single();
-      
-      let error;
+      const { data: existing } = await supabase.from('barbershop_settings').select('id').maybeSingle();
       if (existing) {
-        const result = await supabase
+        await supabase
           .from('barbershop_settings')
-          .update({
-            opening_time: openingTime,
-            closing_time: closingTime,
-            work_days: workDays
-          })
+          .update({ date_overrides: newOverrides })
           .eq('id', existing.id);
-        error = result.error;
-      } else {
-        const result = await supabase
-          .from('barbershop_settings')
-          .insert([{
-            opening_time: openingTime,
-            closing_time: closingTime,
-            work_days: workDays
-          }]);
-        error = result.error;
       }
-
-      if (error) throw error;
-      alert('Configurações salvas com sucesso!');
-      navigate('/admin');
+      setSelectedDate(null);
     } catch (error) {
       alert('Erro ao salvar: ' + error.message);
-    } finally {
-      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-500">
-        <Clock className="animate-spin mr-2" /> Carregando configurações...
-      </div>
-    );
-  }
+  const handleClearOverride = async () => {
+    if (!selectedDate) return;
+    const dateKey = format(selectedDate, 'yyyy-MM-dd');
+    
+    const newOverrides = { ...overrides };
+    delete newOverrides[dateKey]; // Remove a exceção, volta ao normal da semana
+    
+    setOverrides(newOverrides);
+    
+    try {
+      const { data: existing } = await supabase.from('barbershop_settings').select('id').maybeSingle();
+      if (existing) {
+        await supabase
+          .from('barbershop_settings')
+          .update({ date_overrides: newOverrides })
+          .eq('id', existing.id);
+      }
+      setSelectedDate(null);
+    } catch (error) {
+      alert('Erro ao limpar: ' + error.message);
+    }
+  };
+
+  const daysInMonth = eachDayOfInterval({
+    start: startOfMonth(currentMonth),
+    end: endOfMonth(currentMonth),
+  });
 
   return (
-    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 font-sans p-6 flex justify-center items-start pt-12 transition-colors duration-300">
-      <div className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        
-        {/* Header */}
-        <div className="bg-slate-900 dark:bg-black p-6 text-white flex items-center gap-4">
-          <Link to="/admin" className="p-2 bg-white/10 rounded-full hover:bg-white/20 transition">
+    <div className="min-h-screen bg-slate-100 dark:bg-slate-900 font-sans p-4 md:p-6 transition-colors duration-300">
+      <div className="max-w-4xl mx-auto">
+        <div className="flex items-center gap-4 mb-6">
+          <Link to="/admin" className="p-2 bg-white dark:bg-slate-800 rounded-full shadow hover:bg-slate-50 transition text-slate-700 dark:text-white">
             <ArrowLeft size={20} />
           </Link>
-          <div>
-            <h1 className="text-xl font-bold">Configurações</h1>
-            <p className="text-slate-400 text-sm">Defina seus horários e dias.</p>
-          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Gerenciar Calendário</h1>
         </div>
 
-        <div className="p-8 space-y-8">
-          
-          {/* Horários */}
-          <div className="space-y-4">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-white">
-              <Clock className="text-blue-600" size={20} /> Horário de Atendimento
-            </h2>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Abertura</label>
-                <input 
-                  type="time" 
-                  value={openingTime}
-                  onChange={(e) => setOpeningTime(e.target.value)}
-                  className="w-full p-4 text-xl font-bold bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 outline-none dark:text-white transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-500 dark:text-slate-400 mb-2">Fechamento</label>
-                <input 
-                  type="time" 
-                  value={closingTime}
-                  onChange={(e) => setClosingTime(e.target.value)}
-                  className="w-full p-4 text-xl font-bold bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 rounded-xl focus:border-blue-500 outline-none dark:text-white transition-colors"
-                />
-              </div>
-            </div>
-            <p className="text-xs text-slate-400 mt-2">
-              Dica: Se o horário de fechamento for menor que o de abertura (ex: 02:00), o sistema entenderá que vai até o dia seguinte.
-            </p>
+        <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <div className="p-6 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+            <button onClick={() => setCurrentMonth(subMonths(currentMonth, 1))} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-600 dark:text-white transition"><ChevronLeft /></button>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-white capitalize">{format(currentMonth, 'MMMM yyyy', { locale: ptBR })}</h2>
+            <button onClick={() => setCurrentMonth(addMonths(currentMonth, 1))} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full text-slate-600 dark:text-white transition"><ChevronRight /></button>
           </div>
 
-          <hr className="border-slate-100 dark:border-slate-700" />
+          <div className="p-6">
+            <div className="grid grid-cols-7 gap-2 mb-2">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map(day => <div key={day} className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-2">{day}</div>)}
+            </div>
+            
+            <div className="grid grid-cols-7 gap-2">
+              {Array.from({ length: getDay(startOfMonth(currentMonth)) }).map((_, i) => <div key={`empty-${i}`} />)}
 
-          {/* Dias da Semana */}
-          <div className="space-y-4">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-white">
-              <Calendar className="text-blue-600" size={20} /> Dias de Funcionamento
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {daysOfWeek.map((day) => {
-                const isActive = workDays.includes(day.id);
+              {daysInMonth.map((date) => {
+                const config = getDayConfig(date);
+                const isOverride = config.isOverride;
+
                 return (
                   <button
-                    key={day.id}
-                    onClick={() => toggleDay(day.id)}
-                    className={`py-3 px-4 rounded-xl font-medium text-sm transition-all border-2
-                      ${isActive 
-                        ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-500/30' 
-                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-blue-300 dark:hover:border-slate-500'
-                      }`}
+                    key={date.toString()}
+                    onClick={() => handleDayClick(date)}
+                    className={`
+                      h-24 rounded-xl border-2 flex flex-col items-start justify-between p-2 transition-all relative overflow-hidden group
+                      ${isToday(date) ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-slate-800' : ''}
+                      ${!config.active 
+                        ? 'bg-red-50 border-red-100 dark:bg-red-900/20 dark:border-red-900/30' 
+                        : isOverride 
+                          ? 'bg-blue-50 border-blue-200 dark:bg-blue-900/20 dark:border-blue-800' 
+                          : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700 hover:border-blue-300'}
+                    `}
                   >
-                    {day.label}
+                    <span className={`text-sm font-bold w-6 h-6 flex items-center justify-center rounded-full ${isToday(date) ? 'bg-blue-600 text-white' : 'text-slate-700 dark:text-slate-300'}`}>{format(date, 'd')}</span>
+                    <div className="w-full">
+                      {config.active ? (
+                        <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 block text-center bg-slate-100 dark:bg-slate-700 rounded py-1">{config.start} - {config.end}</span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-red-500 block text-center uppercase tracking-wide">Fechado</span>
+                      )}
+                    </div>
+                    {isOverride && <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-blue-500"></div>}
                   </button>
-                )
+                );
               })}
             </div>
           </div>
-
-          <div className="pt-6">
-            <button 
-              onClick={handleSave}
-              disabled={loading}
-              className="w-full py-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold text-lg shadow-lg shadow-green-600/20 transition-all flex items-center justify-center gap-2 transform active:scale-95"
-            >
-              <Save size={20} /> Salvar Configurações
-            </button>
-          </div>
-
         </div>
       </div>
+
+      {selectedDate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                Editar {format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}
+              </h3>
+              <button onClick={() => setSelectedDate(null)} className="text-slate-400 hover:text-red-500 transition"><X size={24} /></button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 p-4 rounded-xl">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Dia com Expediente?</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" checked={modalConfig.active} onChange={(e) => setModalConfig({...modalConfig, active: e.target.checked})} className="sr-only peer" />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-600 peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                </label>
+              </div>
+
+              {modalConfig.active && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Abertura</label>
+                    <input type="time" value={modalConfig.start} onChange={(e) => setModalConfig({...modalConfig, start: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-400 uppercase mb-2 block">Fechamento</label>
+                    <input type="time" value={modalConfig.end} onChange={(e) => setModalConfig({...modalConfig, end: e.target.value})} className="w-full p-4 bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 rounded-xl font-bold text-slate-900 dark:text-white outline-none focus:border-blue-500" />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 bg-slate-50 dark:bg-slate-900/50 flex flex-col gap-3">
+              <button onClick={handleSaveDayConfig} className={`w-full py-4 rounded-xl font-bold text-white shadow-lg transition-all flex items-center justify-center gap-2 ${modalConfig.active ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'}`}>
+                <Save size={20} /> {modalConfig.active ? 'Salvar Horário Específico' : 'Confirmar Folga Neste Dia'}
+              </button>
+              
+              {overrides[format(selectedDate, 'yyyy-MM-dd')] && (
+                <button onClick={handleClearOverride} className="w-full py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200 dark:text-slate-400 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
+                  <Trash2 size={18} /> Restaurar Padrão da Semana
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
