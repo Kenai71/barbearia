@@ -36,6 +36,7 @@ export default function BarberDashboard({ session, isAdmin }) {
   }, []);
 
   const fetchAppointments = async () => {
+    // Busca TODOS os agendamentos (se for admin, o Supabase retorna tudo)
     const { data, error } = await supabase
       .from('appointments')
       .select(`*, client:client_id(full_name, email), barber:barber_id(full_name)`)
@@ -43,10 +44,17 @@ export default function BarberDashboard({ session, isAdmin }) {
 
     if (!error && data) {
       setAppointments(data);
+
+      // 1. Separa APENAS os agendamentos do usuário logado (seja ele Admin ou Barbeiro Comum)
       const myApps = data.filter(app => app.barber_id === session.user.id);
+
       const todayCount = myApps.filter(app => isToday(new Date(app.date_time))).length;
       const pendingCount = myApps.filter(app => app.status === 'pending').length;
-      const totalRevenue = data.filter(app => app.status === 'completed').reduce((acc, curr) => acc + (curr.total_price || 0), 0);
+
+      // 2. Calcula o faturamento usando APENAS a lista 'myApps' (pessoal) e não 'data' (geral)
+      const totalRevenue = myApps
+        .filter(app => app.status === 'completed')
+        .reduce((acc, curr) => acc + (curr.total_price || 0), 0);
 
       setStats({ total: myApps.length, today: todayCount, pending: pendingCount, revenue: totalRevenue });
     }
@@ -192,7 +200,8 @@ export default function BarberDashboard({ session, isAdmin }) {
             <div className="w-12 h-12 bg-yellow-50 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center text-yellow-600 dark:text-yellow-400"><Clock size={24} /></div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Faturamento Loja</p><h3 className="text-3xl font-extrabold text-green-600 dark:text-green-400">R$ {stats.revenue}</h3></div>
+            {/* Título alterado para indicar que é pessoal */}
+            <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Seu Faturamento</p><h3 className="text-3xl font-extrabold text-green-600 dark:text-green-400">R$ {stats.revenue}</h3></div>
             <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400"><Wallet size={24} /></div>
           </div>
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">

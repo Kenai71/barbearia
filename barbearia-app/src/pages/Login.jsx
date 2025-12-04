@@ -152,7 +152,7 @@ export default function Login() {
             
             <div className="mb-10">
               <h1 className="text-3xl font-bold text-slate-900 mb-3 tracking-tight">
-                {isRegistering ? 'Criar Conta Cliente' : 'Bem-vindo de volta'}
+                {isRegistering ? 'Criar Conta Cliente' : 'Agende seu Corte'}
               </h1>
               <p className="text-slate-500 text-base">
                 {isRegistering ? 'Cadastre-se para agendar seus cortes.' : 'Insira suas credenciais para acessar.'}
