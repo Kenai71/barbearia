@@ -10,6 +10,7 @@ import AdminSettings from './pages/AdminSettings.jsx';
 function App() {
   const [session, setSession] = useState(null);
   const [role, setRole] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false); // Novo estado para controlar admin
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
 
@@ -20,7 +21,7 @@ function App() {
         const { data: { session } } = await supabase.auth.getSession();
         setSession(session);
         if (session) {
-          await fetchRole(session.user.id);
+          await fetchProfile(session.user.id);
         } else {
           setLoading(false);
         }
@@ -31,11 +32,10 @@ function App() {
     };
     initSession();
 
-    // 2. Escuta mudanças em tempo real (Login, Logout, Refresh)
+    // 2. Escuta mudanças em tempo real
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       
-      // OTIMIZAÇÃO: Se for apenas renovação de token e o usuário for o mesmo,
-      // não ativamos o loading para não travar a tela.
+      // Otimização para não recarregar em refresh de token
       if (event === 'TOKEN_REFRESHED' && session?.user?.id === newSession?.user?.id) {
         setSession(newSession);
         return;
@@ -48,30 +48,33 @@ function App() {
         if (!session || session.user.id !== newSession.user.id) {
           setLoading(true);
           setErrorMsg(null);
-          await fetchRole(newSession.user.id);
+          await fetchProfile(newSession.user.id);
         }
       } else {
         setRole(null);
+        setIsAdmin(false);
         setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [session]); // Dependência session ajuda a comparar o estado anterior
+  }, [session]);
 
-  const fetchRole = async (userId) => {
+  const fetchProfile = async (userId) => {
     let attempts = 0;
-    const maxAttempts = 5; // Reduzi para 5 para ser mais rápido o erro
+    const maxAttempts = 5;
 
     while (attempts < maxAttempts) {
+      // MODIFICADO: Agora busca role E is_admin
       const { data, error } = await supabase
         .from('profiles')
-        .select('role')
+        .select('role, is_admin')
         .eq('id', userId)
         .single();
       
-      if (!error && data && data.role) {
+      if (!error && data) {
         setRole(data.role);
+        setIsAdmin(data.is_admin || false); // Salva se é admin
         setLoading(false);
         return; 
       }
@@ -85,7 +88,6 @@ function App() {
     setLoading(false); 
   };
 
-  // Tela de Carregamento Global
   if (loading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4">
@@ -95,7 +97,6 @@ function App() {
     );
   }
 
-  // Tela de Erro Global
   if (session && errorMsg) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-slate-50 text-slate-600 gap-4 p-6 text-center">
@@ -122,35 +123,30 @@ function App() {
             !session ? <Login /> : 
             role === 'barber' ? <Navigate to="/admin" /> : 
             role === 'client' ? <Navigate to="/dashboard" /> :
-            // Fallback caso a role demore a carregar, mas o loading já seja false
-            <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+            <div className="h-screen flex items-center justify-center bg-slate-50 gap-4">
               <p className="text-slate-500">Verificando permissões...</p>
-              <button 
-                onClick={() => supabase.auth.signOut()} 
-                className="text-xs text-red-500 hover:underline"
-              >
-                Sair / Cancelar
-              </button>
+              <button onClick={() => supabase.auth.signOut()} className="text-xs text-red-500 hover:underline">Sair</button>
             </div>
           } 
         />
 
         <Route path="/barber-signup" element={<BarberSignup />} />
         
-        {/* Rotas Protegidas */}
         <Route 
           path="/dashboard" 
           element={session && role === 'client' ? <ClientDashboard session={session} /> : <Navigate to="/" />} 
         />
         
+        {/* Passamos isAdmin para o Dashboard */}
         <Route 
           path="/admin" 
-          element={session && role === 'barber' ? <BarberDashboard session={session} /> : <Navigate to="/" />} 
+          element={session && role === 'barber' ? <BarberDashboard session={session} isAdmin={isAdmin} /> : <Navigate to="/" />} 
         />
 
+        {/* Rota de Configurações protegida: Só entra se for Barbeiro E Admin */}
         <Route 
           path="/admin/settings" 
-          element={session && role === 'barber' ? <AdminSettings /> : <Navigate to="/" />} 
+          element={session && role === 'barber' && isAdmin ? <AdminSettings /> : <Navigate to="/admin" />} 
         />
       </Routes>
     </BrowserRouter>

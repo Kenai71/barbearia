@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Moon, Sun, Scissors } from 'lucide-react';
+import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Moon, Sun, Scissors, Settings } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { Link } from 'react-router-dom'; // Importação adicionada
 
-export default function BarberDashboard({ session }) {
+export default function BarberDashboard({ session, isAdmin }) { // Recebe isAdmin
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0 });
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
@@ -22,7 +23,6 @@ export default function BarberDashboard({ session }) {
   useEffect(() => {
     fetchAppointments();
 
-    // Inscreve para atualizações em tempo real
     const subscription = supabase
       .channel('appointments_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, fetchAppointments)
@@ -34,7 +34,6 @@ export default function BarberDashboard({ session }) {
   }, []);
 
   const fetchAppointments = async () => {
-    // Trazemos dados do cliente E do barbeiro responsável
     const { data, error } = await supabase
       .from('appointments')
       .select(`
@@ -47,7 +46,6 @@ export default function BarberDashboard({ session }) {
     if (!error && data) {
       setAppointments(data);
       
-      // Estatísticas: Filtramos apenas os agendamentos DESTE barbeiro logado
       const myApps = data.filter(app => app.barber_id === session.user.id);
       
       const todayCount = myApps.filter(app => isToday(new Date(app.date_time))).length;
@@ -68,10 +66,24 @@ export default function BarberDashboard({ session }) {
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Painel da Barbearia</h1>
-            <p className="text-slate-400 text-sm mt-1">Visão geral de toda a equipe.</p>
+            <p className="text-slate-400 text-sm mt-1">
+              {isAdmin ? 'Modo Administrador & Profissional' : 'Visão geral de toda a equipe.'}
+            </p>
           </div>
           
           <div className="flex items-center gap-4">
+            
+            {/* BOTÃO DE CONFIGURAÇÕES (SÓ PARA ADMIN) */}
+            {isAdmin && (
+              <Link 
+                to="/admin/settings"
+                className="p-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-all border border-blue-500 shadow-lg shadow-blue-900/50"
+                title="Configurações da Loja"
+              >
+                <Settings size={18} />
+              </Link>
+            )}
+
             <button 
               onClick={() => setDarkMode(!darkMode)}
               className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all border border-white/5"
@@ -91,7 +103,7 @@ export default function BarberDashboard({ session }) {
 
       <main className="max-w-7xl mx-auto px-6 -mt-16 pb-12">
         
-        {/* Cards de Estatísticas (PESSOAIS) */}
+        {/* Cards de Estatísticas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between transition-colors">
             <div>
@@ -124,7 +136,7 @@ export default function BarberDashboard({ session }) {
           </div>
         </div>
 
-        {/* Lista de Agenda (COMPARTILHADA) */}
+        {/* Lista de Agenda */}
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden transition-colors">
           <div className="p-6 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex justify-between items-center">
             <h2 className="text-lg font-bold text-slate-800 dark:text-white">Agenda Geral</h2>
@@ -136,7 +148,6 @@ export default function BarberDashboard({ session }) {
             )}
 
             {appointments.map((app) => {
-              // Verifica se este agendamento é para VOCÊ (usuário logado)
               const isMine = app.barber_id === session.user.id;
 
               return (
@@ -144,8 +155,8 @@ export default function BarberDashboard({ session }) {
                   key={app.id} 
                   className={`p-6 transition-all flex flex-col sm:flex-row justify-between sm:items-center gap-4 group border-l-4 
                   ${isMine 
-                    ? 'bg-blue-50/40 dark:bg-blue-900/10 border-l-blue-600' // Destaque se for seu
-                    : 'bg-white dark:bg-slate-800 border-l-transparent opacity-80 hover:opacity-100' // Discreto se for de outro
+                    ? 'bg-blue-50/40 dark:bg-blue-900/10 border-l-blue-600' 
+                    : 'bg-white dark:bg-slate-800 border-l-transparent opacity-80 hover:opacity-100' 
                   }`}
                 >
                   
@@ -162,7 +173,6 @@ export default function BarberDashboard({ session }) {
                           {app.client?.full_name || 'Cliente sem nome'}
                         </h4>
                         
-                        {/* Tag indicativa de quem é o barbeiro */}
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase border
                           ${isMine 
                             ? 'bg-blue-100 text-blue-700 border-blue-200' 
@@ -182,7 +192,6 @@ export default function BarberDashboard({ session }) {
                   </div>
 
                   <div className="flex items-center gap-3 w-full sm:w-auto mt-2 sm:mt-0">
-                    {/* Botões de Ação: Só aparecem se o agendamento for SEU */}
                     {isMine ? (
                       app.status === 'pending' ? (
                         <>
@@ -220,7 +229,6 @@ export default function BarberDashboard({ session }) {
                         </div>
                       )
                     ) : (
-                      // Se não for seu, mostra apenas visualização simples
                       <div className="opacity-50 flex items-center gap-2 text-sm font-medium text-slate-500">
                          <Scissors size={14} /> 
                          Agenda de {app.barber?.full_name?.split(' ')[0]}
