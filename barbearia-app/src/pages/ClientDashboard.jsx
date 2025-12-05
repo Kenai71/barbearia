@@ -375,11 +375,11 @@ export default function ClientDashboard({ session }) {
 
       {/* NAVBAR */}
       <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm/50 backdrop-blur-md bg-white/80 dark:bg-slate-800/80">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
             <Scissors className="text-blue-600" /> BarberPro
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <button 
               onClick={() => setShowPasswordModal(true)} 
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
@@ -392,23 +392,25 @@ export default function ClientDashboard({ session }) {
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto p-6 py-8">
-        <div className="grid lg:grid-cols-3 gap-8">
+      {/* Ajuste de padding no container principal */}
+      <main className="max-w-6xl mx-auto p-4 md:p-6 py-6 md:py-8">
+        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
           
           <div className="lg:col-span-2 space-y-8">
-            <div className="bg-white dark:bg-slate-800 p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-8 flex items-center gap-2">
+            <div className="bg-white dark:bg-slate-800 p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                 <CalendarIcon className="text-blue-600" /> Novo Agendamento
               </h2>
               
               <div className="mb-8">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">1. Profissional</label>
-                <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+                {/* Scroll edge-to-edge no mobile (-mx-5) com snap */}
+                <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0 snap-x snap-mandatory">
                   {barbers.map(barber => (
                     <button
                       key={barber.id}
                       onClick={() => setSelectedBarber(barber.id)}
-                      className={`min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
+                      className={`min-w-[130px] md:min-w-[140px] snap-center p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
                         ${selectedBarber === barber.id 
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500 transform scale-105 shadow-md' 
                           : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-blue-300'}`}
@@ -433,6 +435,7 @@ export default function ClientDashboard({ session }) {
                       <ChevronRight size={20}/>
                     </button>
                   </div>
+                  {/* Grid de dias ajustado */}
                   <div className="grid grid-cols-7 gap-1 sm:gap-2">
                     {['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i} className="text-center text-xs font-bold text-slate-400 py-2">{d}</div>)}
                     {Array.from({ length: getDay(startOfMonth(currentMonth)) }).map((_, i) => <div key={`e-${i}`} />)}
@@ -470,7 +473,8 @@ export default function ClientDashboard({ session }) {
                 {generatedSlots.length === 0 ? (
                   <div className="p-8 text-center text-slate-400 text-sm">Nenhum horário disponível.</div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+                  // Grid ajustado: 3 colunas no mobile, mais colunas em telas maiores
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
                     {generatedSlots.map((slot, index) => {
                       const isTaken = occupiedSlots.includes(slot.compareKey);
                       return (
@@ -479,7 +483,7 @@ export default function ClientDashboard({ session }) {
                           disabled={loading || isTaken}
                           onClick={() => handleSlotClick(slot)}
                           className={`
-                            py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden
+                            py-2 sm:py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden
                             ${isTaken 
                               ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-60 line-through decoration-slate-400' 
                               : 'bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-blue-500 hover:text-blue-600'
@@ -497,7 +501,8 @@ export default function ClientDashboard({ session }) {
           </div>
 
           <div className="lg:col-span-1">
-             <div className="bg-white dark:bg-slate-800 p-6 rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 sticky top-24">
+             {/* Sticky só funciona bem no Desktop (lg), no mobile flui normal */}
+             <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 lg:sticky lg:top-24">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4">Seus Agendamentos</h3>
                 <div className="space-y-3">
                   {myAppointments.map(app => (
