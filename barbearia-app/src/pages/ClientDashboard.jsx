@@ -263,8 +263,8 @@ export default function ClientDashboard({ session }) {
       
       {/* MODAL TROCAR SENHA */}
       {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 border dark:border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full sm:w-full sm:max-w-sm rounded-t-[2rem] sm:rounded-2xl shadow-2xl p-6 border-t sm:border border-slate-200 dark:border-slate-700 transition-all">
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4 text-center">Nova Senha</h3>
             <form onSubmit={handleChangePassword} className="space-y-4">
               <input 
@@ -301,29 +301,31 @@ export default function ClientDashboard({ session }) {
              <div className="w-14 h-14 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <AlertTriangle size={28} />
             </div>
-            <h3 className="text-xl font-bold dark:text-white mb-2">Cancelar?</h3>
+            <h3 className="text-xl font-bold dark:text-white mb-2">Cancelar agendamento?</h3>
+            <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowCancelModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold">Voltar</button>
-              <button onClick={confirmCancel} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-600/20">Sim</button>
+              <button onClick={confirmCancel} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-600/20">Sim, cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE SERVIÇOS */}
+      {/* MODAL DE SERVIÇOS (BOTTOM SHEET NO MOBILE) */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
-          <div className="bg-white dark:bg-slate-800 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300 slide-in-from-bottom-10">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
               <button onClick={() => setShowServiceModal(false)} className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
                 <ArrowLeft className="text-slate-600 dark:text-white" size={24} />
               </button>
               <div>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Escolha os Serviços</h3>
-                <p className="text-xs text-slate-500 font-medium">Selecione um ou mais</p>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white">Serviços</h3>
+                <p className="text-xs text-slate-500 font-medium">Selecione os procedimentos</p>
               </div>
             </div>
-            <div className="p-6 overflow-y-auto custom-scrollbar">
+            
+            <div className="p-5 overflow-y-auto custom-scrollbar flex-1">
               <div className="space-y-3">
                 {SERVICES_LIST.map((service) => {
                   const isSelected = selectedServices.includes(service.id);
@@ -331,7 +333,7 @@ export default function ClientDashboard({ session }) {
                     <button
                       key={service.id}
                       onClick={() => toggleService(service.id)}
-                      className={`w-full flex justify-between items-center p-4 rounded-xl border-2 transition-all group
+                      className={`w-full flex justify-between items-center p-4 rounded-2xl border-2 transition-all group active:scale-95
                         ${isSelected 
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500' 
                           : 'border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600'
@@ -354,9 +356,10 @@ export default function ClientDashboard({ session }) {
                 })}
               </div>
             </div>
-            <div className="p-6 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50">
+
+            <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 pb-8 sm:pb-5">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-slate-500 font-medium">Total estimado</span>
+                <span className="text-slate-500 font-medium text-sm">Total estimado</span>
                 <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
                   R$ {totalPrice}
                 </span>
@@ -364,9 +367,9 @@ export default function ClientDashboard({ session }) {
               <button 
                 onClick={handleConfirmBooking}
                 disabled={selectedServices.length === 0 || loading}
-                className="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                className="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 active:scale-95"
               >
-                {loading ? 'Confirmando...' : 'Confirmar Agendamento'}
+                {loading ? 'Processando...' : 'Confirmar Agendamento'}
               </button>
             </div>
           </div>
@@ -379,7 +382,7 @@ export default function ClientDashboard({ session }) {
           <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
             <Scissors className="text-blue-600" /> BarberPro
           </div>
-          <div className="flex items-center gap-3 md:gap-4">
+          <div className="flex items-center gap-3">
             <button 
               onClick={() => setShowPasswordModal(true)} 
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
@@ -387,32 +390,32 @@ export default function ClientDashboard({ session }) {
             >
               <Lock size={20} />
             </button>
-            <button onClick={() => supabase.auth.signOut()} className="text-slate-400 hover:text-red-500 transition-colors"><LogOut size={20} /></button>
+            <button onClick={() => supabase.auth.signOut()} className="text-slate-400 hover:text-red-500 transition-colors p-2"><LogOut size={20} /></button>
           </div>
         </div>
       </nav>
 
-      {/* Ajuste de padding no container principal */}
-      <main className="max-w-6xl mx-auto p-4 md:p-6 py-6 md:py-8">
+      <main className="max-w-6xl mx-auto p-4 md:p-6 py-6 md:py-8 pb-20">
         <div className="grid lg:grid-cols-3 gap-6 lg:gap-8">
           
-          <div className="lg:col-span-2 space-y-8">
+          <div className="lg:col-span-2 space-y-6">
             <div className="bg-white dark:bg-slate-800 p-5 md:p-8 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700">
               <h2 className="text-xl md:text-2xl font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
                 <CalendarIcon className="text-blue-600" /> Novo Agendamento
               </h2>
               
+              {/* SELEÇÃO DE PROFISSIONAL */}
               <div className="mb-8">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">1. Profissional</label>
-                {/* Scroll edge-to-edge no mobile (-mx-5) com snap */}
-                <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0 snap-x snap-mandatory">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">1. Profissional</label>
+                {/* Ajuste Mobile: Bleed horizontal + Snap */}
+                <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0 snap-x snap-mandatory scroll-pl-5">
                   {barbers.map(barber => (
                     <button
                       key={barber.id}
                       onClick={() => setSelectedBarber(barber.id)}
-                      className={`min-w-[130px] md:min-w-[140px] snap-center p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
+                      className={`min-w-[120px] md:min-w-[140px] snap-center p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
                         ${selectedBarber === barber.id 
-                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500 transform scale-105 shadow-md' 
+                          ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500 shadow-md' 
                           : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-blue-300'}`}
                     >
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm transition-colors
@@ -425,19 +428,20 @@ export default function ClientDashboard({ session }) {
                 </div>
               </div>
 
+              {/* SELEÇÃO DE DATA */}
               <div className={`mb-8 transition-all duration-500 ${!selectedBarber ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">2. Selecione a Data</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">2. Data</label>
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
                   <div className="flex justify-between items-center mb-4">
-                    <button onClick={prevMonth} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full"><ChevronLeft size={20} className="dark:text-white"/></button>
+                    <button onClick={prevMonth} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full active:scale-90 transition"><ChevronLeft size={20} className="dark:text-white"/></button>
                     <span className="font-bold text-slate-800 dark:text-white capitalize">{format(currentMonth, 'MMMM yyyy', { locale: ptBR })}</span>
-                    <button onClick={nextMonth} disabled={isNextDisabled} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full disabled:opacity-30 disabled:cursor-not-allowed text-slate-800 dark:text-white">
+                    <button onClick={nextMonth} disabled={isNextDisabled} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90 transition text-slate-800 dark:text-white">
                       <ChevronRight size={20}/>
                     </button>
                   </div>
-                  {/* Grid de dias ajustado */}
+                  
                   <div className="grid grid-cols-7 gap-1 sm:gap-2">
-                    {['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i} className="text-center text-xs font-bold text-slate-400 py-2">{d}</div>)}
+                    {['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i} className="text-center text-[10px] sm:text-xs font-bold text-slate-400 py-2">{d}</div>)}
                     {Array.from({ length: getDay(startOfMonth(currentMonth)) }).map((_, i) => <div key={`e-${i}`} />)}
                     {daysInMonth.map((date) => {
                       const config = getDayConfig(date);
@@ -469,11 +473,10 @@ export default function ClientDashboard({ session }) {
 
               {/* HORÁRIOS */}
               <div className={`transition-all duration-500 ${!selectedDate ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block">3. Horários para {selectedDate && format(selectedDate, "dd 'de' MMMM", { locale: ptBR })}</label>
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">3. Horário</label>
                 {generatedSlots.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 text-sm">Nenhum horário disponível.</div>
+                  <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl">Nenhum horário disponível nesta data.</div>
                 ) : (
-                  // Grid ajustado: 3 colunas no mobile, mais colunas em telas maiores
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
                     {generatedSlots.map((slot, index) => {
                       const isTaken = occupiedSlots.includes(slot.compareKey);
@@ -483,9 +486,9 @@ export default function ClientDashboard({ session }) {
                           disabled={loading || isTaken}
                           onClick={() => handleSlotClick(slot)}
                           className={`
-                            py-2 sm:py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden
+                            py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden active:scale-95
                             ${isTaken 
-                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-60 line-through decoration-slate-400' 
+                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-60' 
                               : 'bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-blue-500 hover:text-blue-600'
                             }
                           `}
@@ -501,23 +504,32 @@ export default function ClientDashboard({ session }) {
           </div>
 
           <div className="lg:col-span-1">
-             {/* Sticky só funciona bem no Desktop (lg), no mobile flui normal */}
              <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 lg:sticky lg:top-24">
-                <h3 className="font-bold text-slate-900 dark:text-white mb-4">Seus Agendamentos</h3>
+                <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                   <Clock size={18} className="text-blue-500"/> Seus Agendamentos
+                </h3>
                 <div className="space-y-3">
                   {myAppointments.map(app => (
-                    <div key={app.id} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="font-bold text-slate-800 dark:text-white">{format(new Date(app.date_time), "dd/MM 'as' HH:mm")}</span>
-                        <button onClick={() => requestCancel(app)} className="text-red-500"><Trash2 size={16}/></button>
+                    <div key={app.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
+                      <div className="flex justify-between items-start">
+                        <div>
+                           <div className="font-bold text-slate-900 dark:text-white text-lg">{format(new Date(app.date_time), "HH:mm")}</div>
+                           <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">{format(new Date(app.date_time), "dd 'de' MMM", { locale: ptBR })}</div>
+                        </div>
+                        <button onClick={() => requestCancel(app)} className="text-slate-400 hover:text-red-500 bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 transition"><Trash2 size={16}/></button>
                       </div>
-                      <div className="text-xs text-slate-500 flex justify-between">
-                        <span>{app.profiles?.full_name}</span>
-                        {app.total_price > 0 && <span className="font-bold text-blue-600">R$ {app.total_price}</span>}
+                      
+                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-1 flex justify-between items-center text-sm">
+                        <span className="text-slate-600 dark:text-slate-400 font-medium">{app.profiles?.full_name}</span>
+                        {app.total_price > 0 && <span className="font-bold text-slate-900 dark:text-white bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs text-green-700 dark:text-green-400">R$ {app.total_price}</span>}
                       </div>
                     </div>
                   ))}
-                  {myAppointments.length === 0 && <p className="text-slate-400 text-sm">Nada agendado.</p>}
+                  {myAppointments.length === 0 && (
+                    <div className="text-center py-8 text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                      Você ainda não tem agendamentos.
+                    </div>
+                  )}
                 </div>
              </div>
           </div>
