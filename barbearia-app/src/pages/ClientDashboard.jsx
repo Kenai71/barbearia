@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { Clock, LogOut, Scissors, User, Trash2, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ArrowLeft, Check, Lock, Loader2 } from 'lucide-react';
+import { Clock, LogOut, Scissors, User, Trash2, AlertTriangle, Calendar as CalendarIcon, ChevronLeft, ChevronRight, ArrowLeft, Check, Lock, Loader2, MapPin } from 'lucide-react';
 import { format, parseISO, addMinutes, setHours, setMinutes, isBefore, addDays, startOfDay, isSameDay, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, isToday, isAfter, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -383,6 +383,18 @@ export default function ClientDashboard({ session }) {
             <Scissors className="text-blue-600" /> BarberPro
           </div>
           <div className="flex items-center gap-3">
+            
+            {/* ÍCONE DE LOCALIZAÇÃO ADICIONADO AQUI */}
+            <a 
+              href="https://www.google.com/maps/search/?api=1&query=R.+da+Bolandeira,+3+-+Imbu%C3%AD,+Salvador+-+BA,+41720-440" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
+              title="Ver Localização"
+            >
+              <MapPin size={20} />
+            </a>
+
             <button 
               onClick={() => setShowPasswordModal(true)} 
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
