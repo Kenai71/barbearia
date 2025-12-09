@@ -380,7 +380,7 @@ export default function ClientDashboard({ session }) {
       <nav className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-20 shadow-sm/50 backdrop-blur-md bg-white/80 dark:bg-slate-800/80">
         <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
           <div className="flex items-center gap-2 text-slate-900 dark:text-white font-bold text-xl tracking-tight">
-            <Scissors className="text-blue-600" /> BarberPro
+            <Scissors className="text-blue-600" /> RaulBarber
           </div>
           <div className="flex items-center gap-3">
             
