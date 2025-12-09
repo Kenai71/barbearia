@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2, History } from 'lucide-react';
-import { format, isToday } from 'date-fns';
+import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { format, isToday, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, isSameDay, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 
@@ -10,11 +10,21 @@ export default function BarberDashboard({ session, isAdmin }) {
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 });
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   
+  // Configurações de Expediente (para o calendário)
+  const [schedule, setSchedule] = useState({});
+  const [overrides, setOverrides] = useState({});
+  const [loadingSettings, setLoadingSettings] = useState(true);
+
+  // Estados do Calendário
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
+  
   // Modais
   const [showNoShowModal, setShowNoShowModal] = useState(false);
   const [appointmentToNoShow, setAppointmentToNoShow] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false); // Modal Faturamento
+  const [showCalendarModal, setShowCalendarModal] = useState(false); // Modal Calendário (Seus Cortes)
 
   // Estados para Troca de Senha
   const [newPassword, setNewPassword] = useState('');
@@ -31,12 +41,23 @@ export default function BarberDashboard({ session, isAdmin }) {
 
   useEffect(() => {
     fetchAppointments();
+    fetchSettings();
+
     const subscription = supabase
       .channel('appointments_channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, fetchAppointments)
       .subscribe();
     return () => { supabase.removeChannel(subscription); };
   }, []);
+
+  const fetchSettings = async () => {
+    const { data } = await supabase.from('barbershop_settings').select('schedule, date_overrides').maybeSingle();
+    if (data) {
+      setSchedule(data.schedule || {});
+      setOverrides(data.date_overrides || {});
+    }
+    setLoadingSettings(false);
+  };
 
   const fetchAppointments = async () => {
     const { data, error } = await supabase
@@ -52,8 +73,7 @@ export default function BarberDashboard({ session, isAdmin }) {
       const todayCount = myApps.filter(app => isToday(new Date(app.date_time))).length;
       const pendingCount = myApps.filter(app => app.status === 'pending').length;
       
-      // MUDANÇA: 'total' agora conta apenas agendamentos ativos (Pendentes ou Confirmados)
-      // Exclui 'completed' (que vai pro histórico) e 'cancelled'
+      // Contagem de cortes ativos (exclui completed e cancelled)
       const activeCutsCount = myApps.filter(app => 
         app.status !== 'completed' && app.status !== 'cancelled'
       ).length;
@@ -115,13 +135,29 @@ export default function BarberDashboard({ session, isAdmin }) {
     setLoadingPass(false);
   };
 
-  // Filtra agendamentos para o histórico (apenas os concluídos deste barbeiro)
-  const completedHistory = appointments.filter(app => 
-    app.barber_id === session.user.id && app.status === 'completed'
-  );
+  // Funções Auxiliares do Calendário
+  const getDayConfig = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    if (overrides[dateKey]) return overrides[dateKey];
+    const dayOfWeek = getDay(date);
+    return schedule[dayOfWeek] || { active: false };
+  };
 
-  // Filtra agendamentos da agenda geral (remove os concluídos para não poluir a tela principal)
-  const activeAppointments = appointments.filter(app => app.status !== 'completed');
+  const daysInMonth = eachDayOfInterval({
+    start: startOfMonth(calendarMonth),
+    end: endOfMonth(calendarMonth),
+  });
+
+  // Filtros de Listas
+  const myApps = appointments.filter(app => app.barber_id === session.user.id);
+  
+  const completedHistory = myApps.filter(app => app.status === 'completed');
+  const activeAppointments = appointments.filter(app => app.status !== 'completed'); // Agenda Geral
+
+  // Agendamentos do dia selecionado no calendário
+  const selectedDayAppointments = selectedCalendarDate 
+    ? myApps.filter(app => isSameDay(new Date(app.date_time), selectedCalendarDate))
+    : [];
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 transition-colors duration-300 font-sans">
@@ -183,9 +219,6 @@ export default function BarberDashboard({ session, isAdmin }) {
                       <div>
                         <p className="font-bold text-slate-800 dark:text-white">{app.client?.full_name}</p>
                         <p className="text-xs text-slate-500">{format(new Date(app.date_time), "dd/MM 'às' HH:mm")}</p>
-                        <div className="flex gap-1 mt-1">
-                          {app.services?.map((s, i) => <span key={i} className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400">{s.label}</span>)}
-                        </div>
                       </div>
                       <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-lg">
                         R$ {app.total_price}
@@ -201,6 +234,96 @@ export default function BarberDashboard({ session, isAdmin }) {
                 <span>Total Acumulado:</span>
                 <span className="text-green-600 dark:text-green-400">R$ {stats.revenue}</span>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CALENDÁRIO (SEUS CORTES) */}
+      {showCalendarModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <CalendarIcon className="text-blue-600" size={20} /> Agenda Pessoal
+                </h3>
+                <p className="text-xs text-slate-500">Selecione um dia para ver os cortes.</p>
+              </div>
+              <button onClick={() => setShowCalendarModal(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition"><X size={20} className="dark:text-white"/></button>
+            </div>
+
+            <div className="p-4 flex-1 overflow-y-auto custom-scrollbar">
+              {/* Navegação do Mês */}
+              <div className="flex justify-between items-center mb-4">
+                <button onClick={() => setCalendarMonth(subMonths(calendarMonth, 1))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ChevronLeft className="dark:text-white" /></button>
+                <span className="font-bold text-slate-800 dark:text-white capitalize">{format(calendarMonth, 'MMMM yyyy', { locale: ptBR })}</span>
+                <button onClick={() => setCalendarMonth(addMonths(calendarMonth, 1))} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full"><ChevronRight className="dark:text-white" /></button>
+              </div>
+
+              {/* Grid do Calendário */}
+              <div className="grid grid-cols-7 gap-2 mb-6">
+                {['D','S','T','Q','Q','S','S'].map(d => <div key={d} className="text-center text-xs font-bold text-slate-400 py-1">{d}</div>)}
+                {Array.from({ length: getDay(startOfMonth(calendarMonth)) }).map((_, i) => <div key={`empty-${i}`} />)}
+                
+                {daysInMonth.map((date) => {
+                  const config = getDayConfig(date);
+                  const isActive = config.active;
+                  const isSelected = selectedCalendarDate && isSameDay(date, selectedCalendarDate);
+                  // Verifica se tem agendamento neste dia
+                  const hasAppointments = myApps.some(app => isSameDay(new Date(app.date_time), date));
+
+                  return (
+                    <button
+                      key={date.toString()}
+                      disabled={!isActive}
+                      onClick={() => setSelectedCalendarDate(date)}
+                      className={`
+                        aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold transition-all relative
+                        ${isSelected ? 'bg-blue-600 text-white shadow-md' : ''}
+                        ${!isSelected && isActive ? 'bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-blue-100 dark:hover:bg-slate-600' : ''}
+                        ${!isActive ? 'bg-transparent text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50' : ''}
+                      `}
+                    >
+                      {format(date, 'd')}
+                      {hasAppointments && !isSelected && isActive && <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-1"></div>}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Lista de Agendamentos do Dia Selecionado */}
+              {selectedCalendarDate && (
+                <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+                  <h4 className="font-bold text-slate-900 dark:text-white mb-3 text-sm">
+                    Agendamentos de {format(selectedCalendarDate, "dd 'de' MMMM", { locale: ptBR })}
+                  </h4>
+                  {selectedDayAppointments.length === 0 ? (
+                    <p className="text-slate-400 text-xs text-center py-4 bg-slate-50 dark:bg-slate-900/30 rounded-xl">Nenhum cliente neste dia.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedDayAppointments.map(app => (
+                        <div key={app.id} className="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                          <div>
+                            <p className="font-bold text-slate-800 dark:text-white text-sm">{app.client?.full_name}</p>
+                            <p className="text-xs text-slate-500 flex items-center gap-1">
+                              <Clock size={10} /> {format(new Date(app.date_time), 'HH:mm')}
+                            </p>
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase
+                            ${app.status === 'completed' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 
+                              app.status === 'confirmed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                              app.status === 'cancelled' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                              'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}
+                          `}>
+                            {app.status === 'completed' ? 'Feito' : app.status === 'pending' ? 'Pendente' : app.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -256,7 +379,6 @@ export default function BarberDashboard({ session, isAdmin }) {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 -mt-16 pb-12">
-        {/* MUDANÇA: Grid alterado para 3 colunas (sem Pendentes) */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
           
           {/* Card Hoje */}
@@ -271,16 +393,22 @@ export default function BarberDashboard({ session, isAdmin }) {
             <button 
               onClick={() => setShowHistoryModal(true)} 
               className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 hover:scale-105 transition-all cursor-pointer shadow-sm"
-              title="Ver Histórico"
+              title="Ver Histórico Financeiro"
             >
               <Wallet size={24} />
             </button>
           </div>
 
-          {/* Card Seus Cortes (COM ÍCONE DE RELÓGIO E CONTAGEM APENAS DE ATIVOS) */}
+          {/* Card Seus Cortes COM BOTÃO DE CALENDÁRIO */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Seus Cortes</p><h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.total}</h3></div>
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300"><Clock size={24} /></div>
+            <button 
+              onClick={() => setShowCalendarModal(true)}
+              className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600 hover:scale-105 transition-all cursor-pointer shadow-sm"
+              title="Ver Calendário de Agendamentos"
+            >
+              <Clock size={24} />
+            </button>
           </div>
         </div>
 
