@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2 } from 'lucide-react';
+import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2, History } from 'lucide-react';
 import { format, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
@@ -9,11 +9,14 @@ export default function BarberDashboard({ session, isAdmin }) {
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 });
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  
+  // Modais
   const [showNoShowModal, setShowNoShowModal] = useState(false);
   const [appointmentToNoShow, setAppointmentToNoShow] = useState(null);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
 
   // Estados para Troca de Senha
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [loadingPass, setLoadingPass] = useState(false);
@@ -36,7 +39,6 @@ export default function BarberDashboard({ session, isAdmin }) {
   }, []);
 
   const fetchAppointments = async () => {
-    // Busca TODOS os agendamentos (se for admin, o Supabase retorna tudo)
     const { data, error } = await supabase
       .from('appointments')
       .select(`*, client:client_id(full_name, email), barber:barber_id(full_name)`)
@@ -45,18 +47,27 @@ export default function BarberDashboard({ session, isAdmin }) {
     if (!error && data) {
       setAppointments(data);
 
-      // 1. Separa APENAS os agendamentos do usuário logado (seja ele Admin ou Barbeiro Comum)
       const myApps = data.filter(app => app.barber_id === session.user.id);
-
+      
       const todayCount = myApps.filter(app => isToday(new Date(app.date_time))).length;
       const pendingCount = myApps.filter(app => app.status === 'pending').length;
+      
+      // MUDANÇA: 'total' agora conta apenas agendamentos ativos (Pendentes ou Confirmados)
+      // Exclui 'completed' (que vai pro histórico) e 'cancelled'
+      const activeCutsCount = myApps.filter(app => 
+        app.status !== 'completed' && app.status !== 'cancelled'
+      ).length;
 
-      // 2. Calcula o faturamento usando APENAS a lista 'myApps' (pessoal) e não 'data' (geral)
       const totalRevenue = myApps
         .filter(app => app.status === 'completed')
         .reduce((acc, curr) => acc + (curr.total_price || 0), 0);
 
-      setStats({ total: myApps.length, today: todayCount, pending: pendingCount, revenue: totalRevenue });
+      setStats({ 
+        total: activeCutsCount, 
+        today: todayCount, 
+        pending: pendingCount, 
+        revenue: totalRevenue 
+      });
     }
   };
 
@@ -104,6 +115,14 @@ export default function BarberDashboard({ session, isAdmin }) {
     setLoadingPass(false);
   };
 
+  // Filtra agendamentos para o histórico (apenas os concluídos deste barbeiro)
+  const completedHistory = appointments.filter(app => 
+    app.barber_id === session.user.id && app.status === 'completed'
+  );
+
+  // Filtra agendamentos da agenda geral (remove os concluídos para não poluir a tela principal)
+  const activeAppointments = appointments.filter(app => app.status !== 'completed');
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 transition-colors duration-300 font-sans">
       
@@ -136,6 +155,53 @@ export default function BarberDashboard({ session, isAdmin }) {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTÓRICO DE FATURAMENTO */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
+            <div className="p-5 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <Wallet className="text-green-600" size={20} /> Histórico de Faturamento
+                </h3>
+                <p className="text-xs text-slate-500">Cortes finalizados por você</p>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition"><X size={20} className="dark:text-white"/></button>
+            </div>
+            
+            <div className="p-4 overflow-y-auto custom-scrollbar">
+              {completedHistory.length === 0 ? (
+                <div className="text-center py-8 text-slate-400">Nenhum corte finalizado ainda.</div>
+              ) : (
+                <div className="space-y-3">
+                  {completedHistory.map((app) => (
+                    <div key={app.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                      <div>
+                        <p className="font-bold text-slate-800 dark:text-white">{app.client?.full_name}</p>
+                        <p className="text-xs text-slate-500">{format(new Date(app.date_time), "dd/MM 'às' HH:mm")}</p>
+                        <div className="flex gap-1 mt-1">
+                          {app.services?.map((s, i) => <span key={i} className="text-[10px] bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-600 dark:text-slate-400">{s.label}</span>)}
+                        </div>
+                      </div>
+                      <span className="font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 px-3 py-1 rounded-lg">
+                        R$ {app.total_price}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700">
+              <div className="flex justify-between items-center font-bold text-lg text-slate-900 dark:text-white">
+                <span>Total Acumulado:</span>
+                <span className="text-green-600 dark:text-green-400">R$ {stats.revenue}</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -190,23 +256,31 @@ export default function BarberDashboard({ session, isAdmin }) {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 -mt-16 pb-12">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
+        {/* MUDANÇA: Grid alterado para 3 colunas (sem Pendentes) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+          
+          {/* Card Hoje */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Hoje</p><h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.today}</h3></div>
             <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-xl flex items-center justify-center text-blue-600 dark:text-blue-400"><CalendarCheck size={24} /></div>
           </div>
+          
+          {/* Card Faturamento com Botão */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Pendentes</p><h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.pending}</h3></div>
-            <div className="w-12 h-12 bg-yellow-50 dark:bg-yellow-900/30 rounded-xl flex items-center justify-center text-yellow-600 dark:text-yellow-400"><Clock size={24} /></div>
-          </div>
-          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            {/* Título alterado para indicar que é pessoal */}
             <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Seu Faturamento</p><h3 className="text-3xl font-extrabold text-green-600 dark:text-green-400">R$ {stats.revenue}</h3></div>
-            <div className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400"><Wallet size={24} /></div>
+            <button 
+              onClick={() => setShowHistoryModal(true)} 
+              className="w-12 h-12 bg-green-50 dark:bg-green-900/30 rounded-xl flex items-center justify-center text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 hover:scale-105 transition-all cursor-pointer shadow-sm"
+              title="Ver Histórico"
+            >
+              <Wallet size={24} />
+            </button>
           </div>
+
+          {/* Card Seus Cortes (COM ÍCONE DE RELÓGIO E CONTAGEM APENAS DE ATIVOS) */}
           <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <div><p className="text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider mb-1">Seus Cortes</p><h3 className="text-3xl font-extrabold text-slate-900 dark:text-white">{stats.total}</h3></div>
-            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300"><CheckCircle size={24} /></div>
+            <div className="w-12 h-12 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-slate-600 dark:text-slate-300"><Clock size={24} /></div>
           </div>
         </div>
 
@@ -215,8 +289,9 @@ export default function BarberDashboard({ session, isAdmin }) {
             <h2 className="text-lg font-bold text-slate-800 dark:text-white">Agenda Geral</h2>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {appointments.length === 0 && <div className="p-12 text-center text-slate-500">Nenhum agendamento encontrado.</div>}
-            {appointments.map((app) => {
+            {activeAppointments.length === 0 && <div className="p-12 text-center text-slate-500">Nenhum agendamento pendente ou confirmado.</div>}
+            
+            {activeAppointments.map((app) => {
               const isMine = app.barber_id === session.user.id;
               const isTodayApp = isToday(new Date(app.date_time));
               return (
@@ -241,7 +316,7 @@ export default function BarberDashboard({ session, isAdmin }) {
                         </>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <span className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${app.status === 'confirmed' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30' : app.status === 'completed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500'}`}>{app.status === 'confirmed' ? 'Confirmado' : app.status}</span>
+                          <span className={`px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-2 ${app.status === 'confirmed' ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 border border-blue-100 dark:border-blue-900/30' : 'bg-slate-100 text-slate-500'}`}>{app.status === 'confirmed' ? 'Confirmado' : app.status}</span>
                           {app.status === 'confirmed' && (
                             <>
                               <button onClick={() => updateStatus(app.id, 'completed')} className="ml-2 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 p-2 rounded-lg text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors" title="Finalizar Corte"><CheckCircle size={20} /></button>
