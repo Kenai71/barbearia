@@ -1,54 +1,195 @@
+// src/pages/BarberDashboard.jsx
+
 import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
-import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarCheck, LogOut, Check, X, Clock, CheckCircle, TrendingUp, Scissors, Settings, Wallet, UserX, UserPlus, Lock, Loader2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Bell } from 'lucide-react'; 
 import { format, isToday, startOfMonth, endOfMonth, eachDayOfInterval, addMonths, subMonths, getDay, isSameDay, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
+
+// CHAVE VAPID PÚBLICA (COLOQUE SUA CHAVE AQUI)
+const VAPID_PUBLIC_KEY = 'BKRWjdFVvU67xQmv0QXJAuq0fLOytQEHV9aEy9JyUI8iyrvnNd_qtqCWpjVwKSyWYFo4oHK0S_ZJ-tk4TM5P7fg'; 
+
+// Converte a chave VAPID de Base64URL para UInt8Array
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+};
 
 export default function BarberDashboard({ session, isAdmin }) {
   const [appointments, setAppointments] = useState([]);
   const [stats, setStats] = useState({ total: 0, today: 0, pending: 0, revenue: 0 });
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   
-  // Configurações de Expediente (para o calendário)
   const [schedule, setSchedule] = useState({});
   const [overrides, setOverrides] = useState({});
   const [loadingSettings, setLoadingSettings] = useState(true);
 
-  // Estados do Calendário
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState(null);
   
-  // Modais
   const [showNoShowModal, setShowNoShowModal] = useState(false);
   const [appointmentToNoShow, setAppointmentToNoShow] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false); // Modal Faturamento
-  const [showCalendarModal, setShowCalendarModal] = useState(false); // Modal Calendário (Seus Cortes)
+  const [showHistoryModal, setShowHistoryModal] = useState(false); 
+  const [showCalendarModal, setShowCalendarModal] = useState(false); 
 
-  // Estados para Troca de Senha
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [loadingPass, setLoadingPass] = useState(false);
 
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  const [newAppointmentNotification, setNewAppointmentNotification] = useState(null);
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false); 
+
+  const checkSubscription = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || VAPID_PUBLIC_KEY === 'VAPID_PUBLIC_KEY_PLACEHOLDER') {
+      return;
     }
-  }, [darkMode]);
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    setIsPushSubscribed(!!subscription);
+  };
+  
+  const subscribeUser = async () => {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      alert('Seu navegador não suporta notificações push.');
+      return;
+    }
+
+    if (VAPID_PUBLIC_KEY === 'VAPID_PUBLIC_KEY_PLACEHOLDER') {
+        alert('A chave VAPID pública não foi configurada. Fale com o administrador do sistema.');
+        return;
+    }
+
+    if (Notification.permission === 'denied') {
+        alert('Permissão de notificação negada. Você precisa resetá-la nas configurações do navegador.');
+        return;
+    }
+    
+    setLoadingPass(true); 
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        
+        const subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+
+        // Salva a inscrição (Subscription JSON) no banco de dados
+        const { error } = await supabase.from('barber_push_subscriptions').upsert({
+            barber_id: session.user.id,
+            subscription: subscription,
+            // ID para o Supabase usar como chave de unicidade
+            profile_id: session.user.id 
+        }, { onConflict: 'profile_id' });
+
+        if (error) throw error;
+
+        setIsPushSubscribed(true);
+        alert('Notificações ativadas com sucesso! Você receberá alertas mesmo com o site fechado.');
+    } catch (error) {
+        console.error('Erro na inscrição push:', error);
+        alert('Falha ao se inscrever para notificações: ' + error.message);
+    } finally {
+        setLoadingPass(false);
+    }
+  };
+  
+  const unsubscribeUser = async () => {
+    setLoadingPass(true);
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const subscription = await registration.pushManager.getSubscription();
+
+        if (subscription) {
+            await subscription.unsubscribe();
+            // Remove a inscrição do banco de dados
+            const { error } = await supabase.from('barber_push_subscriptions').delete().eq('barber_id', session.user.id);
+            if (error) throw error;
+        }
+
+        setIsPushSubscribed(false);
+        alert('Notificações desativadas.');
+    } catch (error) {
+        console.error('Erro ao cancelar inscrição:', error);
+        alert('Falha ao cancelar inscrição: ' + error.message);
+    } finally {
+        setLoadingPass(false);
+    }
+  };
+
+
+  useEffect(() => { 
+    if (darkMode) { 
+      document.documentElement.classList.add('dark'); 
+    } else { 
+      document.documentElement.classList.remove('dark'); 
+    }
+  }, [darkMode]); 
 
   useEffect(() => {
-    fetchAppointments();
-    fetchSettings();
+    fetchAppointments(); 
+    fetchSettings(); 
+    
+    checkSubscription();
 
     const subscription = supabase
       .channel('appointments_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, fetchAppointments)
-      .subscribe();
-    return () => { supabase.removeChannel(subscription); };
-  }, []);
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, (payload) => {
+          
+          // LÓGICA DE NOTIFICAÇÃO LOCAL PARA NOVOS AGENDAMENTOS (TOAST)
+          if (payload.eventType === 'INSERT' && payload.new.barber_id === session.user.id) {
+              supabase
+                  .from('profiles')
+                  .select('full_name')
+                  .eq('id', payload.new.client_id)
+                  .maybeSingle()
+                  .then(({ data }) => {
+                      const clientName = data?.full_name || 'Novo Cliente';
+                      const appointmentDate = new Date(payload.new.date_time);
+                      const appointmentTime = format(appointmentDate, 'HH:mm');
+                      const appointmentDay = format(appointmentDate, "dd 'de' MMMM", { locale: ptBR });
+                      
+                      setNewAppointmentNotification({
+                          clientName,
+                          time: appointmentTime,
+                          day: appointmentDay
+                      });
+                      
+                      setTimeout(() => setNewAppointmentNotification(null), 7000);
+                  });
+          }
+          // FIM DA LÓGICA DE NOTIFICAÇÃO LOCAL
+          
+          fetchAppointments(); 
+      })
+      .subscribe(); 
+      
+    return () => { supabase.removeChannel(subscription); }; 
+  }, [session.user.id]);
+
+  // Funções Auxiliares do Calendário (Omitidas por brevidade, mas devem ser mantidas)
+  const getDayConfig = (date) => {
+    const dateKey = format(date, 'yyyy-MM-dd');
+    if (overrides[dateKey]) return overrides[dateKey];
+    const dayOfWeek = getDay(date);
+    return schedule[dayOfWeek] || { active: false };
+  };
+
+  const daysInMonth = eachDayOfInterval({
+    start: startOfMonth(calendarMonth),
+    end: endOfMonth(calendarMonth),
+  });
 
   const fetchSettings = async () => {
     const { data } = await supabase.from('barbershop_settings').select('schedule, date_overrides').maybeSingle();
@@ -73,7 +214,6 @@ export default function BarberDashboard({ session, isAdmin }) {
       const todayCount = myApps.filter(app => isToday(new Date(app.date_time))).length;
       const pendingCount = myApps.filter(app => app.status === 'pending').length;
       
-      // Contagem de cortes ativos (exclui completed e cancelled)
       const activeCutsCount = myApps.filter(app => 
         app.status !== 'completed' && app.status !== 'cancelled'
       ).length;
@@ -135,33 +275,36 @@ export default function BarberDashboard({ session, isAdmin }) {
     setLoadingPass(false);
   };
 
-  // Funções Auxiliares do Calendário
-  const getDayConfig = (date) => {
-    const dateKey = format(date, 'yyyy-MM-dd');
-    if (overrides[dateKey]) return overrides[dateKey];
-    const dayOfWeek = getDay(date);
-    return schedule[dayOfWeek] || { active: false };
-  };
-
-  const daysInMonth = eachDayOfInterval({
-    start: startOfMonth(calendarMonth),
-    end: endOfMonth(calendarMonth),
-  });
-
-  // Filtros de Listas
   const myApps = appointments.filter(app => app.barber_id === session.user.id);
   
   const completedHistory = myApps.filter(app => app.status === 'completed');
   const activeAppointments = appointments.filter(app => app.status !== 'completed'); // Agenda Geral
 
-  // Agendamentos do dia selecionado no calendário
   const selectedDayAppointments = selectedCalendarDate 
     ? myApps.filter(app => isSameDay(new Date(app.date_time), selectedCalendarDate))
     : [];
-
+  
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 transition-colors duration-300 font-sans">
       
+      {/* NOVO: NOTIFICAÇÃO DE NOVO AGENDAMENTO (TOAST LOCAL) */}
+      {newAppointmentNotification && (
+        <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-right-10 duration-500">
+          <div className="bg-green-600 text-white p-4 rounded-xl shadow-2xl flex items-center gap-3 max-w-sm">
+            <CalendarCheck size={24} />
+            <div>
+              <p className="font-bold">Novo Agendamento Recebido!</p>
+              <p className="text-sm">
+                {newAppointmentNotification.clientName} | {newAppointmentNotification.day} às {newAppointmentNotification.time}
+              </p>
+            </div>
+            <button onClick={() => setNewAppointmentNotification(null)} className="ml-2 text-white/80 hover:text-white">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL TROCAR SENHA */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
@@ -195,7 +338,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL HISTÓRICO DE FATURAMENTO */}
+      {/* MODAL HISTÓRICO DE FATURAMENTO (Omitido por brevidade) */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
@@ -239,7 +382,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL CALENDÁRIO (SEUS CORTES) */}
+      {/* MODAL CALENDÁRIO (SEUS CORTES) (Omitido por brevidade) */}
       {showCalendarModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
@@ -329,7 +472,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL NÃO COMPARECEU */}
+      {/* MODAL NÃO COMPARECEU (Omitido por brevidade) */}
       {showNoShowModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center border dark:border-slate-700">
@@ -354,6 +497,26 @@ export default function BarberDashboard({ session, isAdmin }) {
           </div>
           
           <div className="flex items-center gap-4">
+            
+            {/* BOTÃO DE NOTIFICAÇÕES PUSH */}
+            <button 
+              onClick={isPushSubscribed ? unsubscribeUser : subscribeUser}
+              disabled={loadingPass || VAPID_PUBLIC_KEY === 'VAPID_PUBLIC_KEY_PLACEHOLDER'}
+              className={`p-2 rounded-lg transition-all border shadow-lg flex items-center justify-center gap-2
+                ${isPushSubscribed 
+                    ? 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white' 
+                    : 'bg-white/10 hover:bg-white/20 border-white/5 text-white'
+                }
+              `}
+              title={isPushSubscribed ? "Desativar Notificações Push" : "Ativar Notificações Push em Segundo Plano"}
+            >
+              {loadingPass ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />}
+              <span className="hidden sm:inline">
+                {isPushSubscribed ? 'Notificações Ativas' : 'Ativar Alertas'}
+              </span>
+            </button>
+            {/* FIM BOTÃO PUSH */}
+            
             {isAdmin && (
               <>
                 <Link to="/admin/register-barber" className="p-2 rounded-lg bg-green-600 hover:bg-green-700 text-white border border-green-500 shadow-lg transition-all" title="Cadastrar Novo Barbeiro">
