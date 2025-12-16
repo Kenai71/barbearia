@@ -38,7 +38,7 @@ export default function ClientDashboard({ session }) {
   const [tempSlot, setTempSlot] = useState(null); 
   const [selectedServices, setSelectedServices] = useState([]);
 
-  // --- NOVO: Estado para Troca de Senha ---
+  // Estado para Troca de Senha
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -57,7 +57,7 @@ export default function ClientDashboard({ session }) {
     }
   }, [darkMode]);
 
-  // Carrega dados iniciais
+  // Carrega dados iniciais e configura Realtime
   useEffect(() => {
     const fetchData = async () => {
       const { data: barberList } = await supabase.from('profiles').select('*').eq('role', 'barber');
@@ -72,13 +72,33 @@ export default function ClientDashboard({ session }) {
       fetchMyAppointments();
     };
     fetchData();
+
+    // ESCUTA EM TEMPO REAL: Quando o barbeiro mudar o status para 'completed', a lista atualiza sozinha
+    const subscription = supabase
+      .channel('client_dashboard_updates')
+      .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'appointments',
+          filter: `client_id=eq.${session.user.id}` 
+      }, () => {
+          fetchMyAppointments();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
   }, [session.user.id]);
 
+  // BUSCA AGENDAMENTOS: Filtrando para NÃO mostrar os concluídos
   const fetchMyAppointments = async () => {
     const { data } = await supabase
       .from('appointments')
       .select('*, profiles:barber_id(full_name)')
       .eq('client_id', session.user.id)
+      .neq('status', 'completed') // Remove da lista se o barbeiro concluiu
+      .neq('status', 'cancelled') // Opcional: também remove se foi cancelado
       .order('date_time', { ascending: true });
     setMyAppointments(data || []);
   };
@@ -110,7 +130,7 @@ export default function ClientDashboard({ session }) {
 
   const isNextDisabled = isAfter(startOfMonth(addMonths(currentMonth, 1)), maxDate);
 
-  // --- GERAÇÃO DOS SLOTS ---
+  // GERAÇÃO DOS SLOTS
   useEffect(() => {
     setGeneratedSlots([]);
     if (!selectedDate) return;
@@ -146,7 +166,7 @@ export default function ClientDashboard({ session }) {
     setGeneratedSlots(slots);
   }, [selectedDate, schedule, overrides]);
 
-  // --- BUSCA OCUPADOS ---
+  // BUSCA OCUPADOS
   useEffect(() => {
     const fetchSlots = async () => {
       if (!selectedDate || !selectedBarber) return;
@@ -160,6 +180,7 @@ export default function ClientDashboard({ session }) {
         .from('appointments')
         .select('date_time')
         .eq('barber_id', selectedBarber)
+        .neq('status', 'cancelled') // Slots cancelados ficam livres
         .gte('date_time', startFilter)
         .lte('date_time', endFilter);
 
@@ -194,7 +215,6 @@ export default function ClientDashboard({ session }) {
 
   const handleConfirmBooking = async () => {
     setLoading(true);
-    
     const servicesToSave = selectedServices.map(id => SERVICES_LIST.find(s => s.id === id));
 
     const { error } = await supabase.from('appointments').insert([{ 
@@ -223,6 +243,7 @@ export default function ClientDashboard({ session }) {
 
   const confirmCancel = async () => {
     if (!appointmentToCancel) return;
+    // Em vez de deletar, você pode mudar o status para 'cancelled' se preferir manter histórico
     await supabase.from('appointments').delete().eq('id', appointmentToCancel.id);
     fetchMyAppointments();
     if (selectedBarber && appointmentToCancel.barber_id === selectedBarber) {
@@ -232,7 +253,6 @@ export default function ClientDashboard({ session }) {
     setShowCancelModal(false);
   };
 
-  // --- FUNÇÃO DE TROCAR SENHA ---
   const handleChangePassword = async (e) => {
     e.preventDefault();
     if (newPassword !== confirmNewPassword) {
@@ -311,7 +331,7 @@ export default function ClientDashboard({ session }) {
         </div>
       )}
 
-      {/* MODAL DE SERVIÇOS (BOTTOM SHEET NO MOBILE) */}
+      {/* MODAL DE SERVIÇOS */}
       {showServiceModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300 slide-in-from-bottom-10">
@@ -383,8 +403,6 @@ export default function ClientDashboard({ session }) {
             <Scissors className="text-blue-600" /> RaulBarber
           </div>
           <div className="flex items-center gap-3">
-            
-            {/* ÍCONE DE LOCALIZAÇÃO ADICIONADO AQUI */}
             <a 
               href="https://www.google.com/maps/search/?api=1&query=R.+da+Bolandeira,+3+-+Imbu%C3%AD,+Salvador+-+BA,+41720-440" 
               target="_blank" 
@@ -394,7 +412,6 @@ export default function ClientDashboard({ session }) {
             >
               <MapPin size={20} />
             </a>
-
             <button 
               onClick={() => setShowPasswordModal(true)} 
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
@@ -416,10 +433,9 @@ export default function ClientDashboard({ session }) {
                 <CalendarIcon className="text-blue-600" /> Novo Agendamento
               </h2>
               
-              {/* SELEÇÃO DE PROFISSIONAL */}
+              {/* 1. PROFISSIONAL */}
               <div className="mb-8">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">1. Profissional</label>
-                {/* Ajuste Mobile: Bleed horizontal + Snap */}
                 <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0 snap-x snap-mandatory scroll-pl-5">
                   {barbers.map(barber => (
                     <button
@@ -440,7 +456,7 @@ export default function ClientDashboard({ session }) {
                 </div>
               </div>
 
-              {/* SELEÇÃO DE DATA */}
+              {/* 2. DATA */}
               <div className={`mb-8 transition-all duration-500 ${!selectedBarber ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">2. Data</label>
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
@@ -483,7 +499,7 @@ export default function ClientDashboard({ session }) {
                 </div>
               </div>
 
-              {/* HORÁRIOS */}
+              {/* 3. HORÁRIO */}
               <div className={`transition-all duration-500 ${!selectedDate ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">3. Horário</label>
                 {generatedSlots.length === 0 ? (
@@ -515,6 +531,7 @@ export default function ClientDashboard({ session }) {
             </div>
           </div>
 
+          {/* SEUS AGENDAMENTOS (COLUNA LATERAL) */}
           <div className="lg:col-span-1">
              <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 lg:sticky lg:top-24">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
