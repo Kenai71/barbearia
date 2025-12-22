@@ -15,7 +15,6 @@ const SERVICES_LIST = [
   { id: 'pigmentacao', label: 'Pigmentação', price: 15 },
 ];
 
-// IDs dos serviços que ocupam 2 horários (1 hora no total)
 const LONG_SERVICES = ['pigmentacao', 'reflexo', 'luzes', 'nevou', 'barba'];
 
 export default function ClientDashboard({ session }) {
@@ -94,12 +93,7 @@ export default function ClientDashboard({ session }) {
       .neq('status', 'cancelled')
       .order('date_time', { ascending: true });
     
-    const uniqueApps = [];
-    (data || []).forEach(app => {
-        uniqueApps.push(app);
-    });
-
-    setMyAppointments(uniqueApps);
+    setMyAppointments(data || []);
   };
 
   const getDayConfig = (date) => {
@@ -148,18 +142,19 @@ export default function ClientDashboard({ session }) {
 
     let current = startTime;
     const now = new Date(); 
-    // Define o limite mínimo de 1 hora de antecedência
     const minAdvanceTime = addMinutes(now, 60);
 
     while (isBefore(current, endTime)) {
-      // Regra alterada: Verifica se o horário do slot é posterior ao horário atual + 60 minutos
-      if (!isToday(selectedDate) || isAfter(current, minAdvanceTime)) {
-        slots.push({
-          label: format(current, 'HH:mm'),
-          fullDate: current.toISOString(),
-          compareKey: format(current, 'yyyy-MM-dd HH:mm') 
-        });
-      }
+      // Agora sempre adicionamos o slot, mas marcamos se ele é "em cima da hora"
+      const isTooSoon = isToday(selectedDate) && isBefore(current, minAdvanceTime);
+      
+      slots.push({
+        label: format(current, 'HH:mm'),
+        fullDate: current.toISOString(),
+        compareKey: format(current, 'yyyy-MM-dd HH:mm'),
+        isTooSoon: isTooSoon
+      });
+      
       current = addMinutes(current, 30);
     }
     setGeneratedSlots(slots);
@@ -214,9 +209,7 @@ export default function ClientDashboard({ session }) {
   const handleConfirmBooking = async () => {
     setLoading(true);
     const servicesToSave = selectedServices.map(id => SERVICES_LIST.find(s => s.id === id));
-    
     const needsExtraSlot = selectedServices.some(id => LONG_SERVICES.includes(id));
-    
     const appointmentsToInsert = [];
     
     appointmentsToInsert.push({
@@ -234,14 +227,14 @@ export default function ClientDashboard({ session }) {
         const nextTimeISO = nextTime.toISOString();
 
         if (occupiedSlots.includes(nextTimeKey)) {
-            alert('Atenção: Este serviço requer 1 hora, mas o horário seguinte está ocupado. Por favor, escolha outro horário.');
+            alert('Atenção: Este serviço requer 1 hora, mas o horário seguinte está ocupado.');
             setLoading(false);
             return;
         }
 
         const slotExists = generatedSlots.some(s => s.compareKey === nextTimeKey);
         if (!slotExists) {
-            alert('Atenção: Este serviço requer 1 hora, mas este é o último horário disponível do dia.');
+            alert('Atenção: Este serviço requer 1 hora, mas este é o último horário do dia.');
             setLoading(false);
             return;
         }
@@ -251,7 +244,7 @@ export default function ClientDashboard({ session }) {
             barber_id: selectedBarber,
             date_time: nextTimeISO, 
             status: 'pending',
-            services: [{ id: 'extra_time', label: 'Tempo adicional (Serviço Longo)', price: 0 }],
+            services: [{ id: 'extra_time', label: 'Tempo adicional', price: 0 }],
             total_price: 0
         });
     }
@@ -260,12 +253,8 @@ export default function ClientDashboard({ session }) {
 
     if (error) alert('Erro: ' + error.message);
     else {
-      alert(needsExtraSlot ? 'Agendado com sucesso! (Horário duplo reservado)' : 'Agendado com sucesso!');
+      alert('Agendado com sucesso!');
       fetchMyAppointments();
-      
-      const newKeys = appointmentsToInsert.map(a => format(new Date(a.date_time), 'yyyy-MM-dd HH:mm'));
-      setOccupiedSlots(prev => [...prev, ...newKeys]);
-      
       setShowServiceModal(false); 
     }
     setLoading(false);
@@ -278,7 +267,6 @@ export default function ClientDashboard({ session }) {
 
   const confirmCancel = async () => {
     if (!appointmentToCancel) return;
-    
     const startTime = new Date(appointmentToCancel.date_time);
     const nextTimeISO = addMinutes(startTime, 30).toISOString();
 
@@ -301,15 +289,12 @@ export default function ClientDashboard({ session }) {
   const handleChangePassword = async (e) => {
     e.preventDefault();
     if (newPassword !== confirmNewPassword) return alert('As senhas não conferem.');
-    if (newPassword.length < 6) return alert('A senha deve ter pelo menos 6 caracteres.');
-
     setLoadingPass(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) alert('Erro ao atualizar senha: ' + error.message);
+    if (error) alert('Erro: ' + error.message);
     else {
-      alert('Senha atualizada com sucesso!');
+      alert('Senha atualizada!');
       setShowPasswordModal(false);
-      setNewPassword(''); setConfirmNewPassword('');
     }
     setLoadingPass(false);
   };
@@ -358,7 +343,7 @@ export default function ClientDashboard({ session }) {
               <AlertTriangle size={28} />
             </div>
             <h3 className="text-xl font-bold dark:text-white mb-2">Cancelar agendamento?</h3>
-            <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita. Se o serviço for de longa duração, os horários vinculados serão removidos.</p>
+            <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowCancelModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold">Voltar</button>
               <button onClick={confirmCancel} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-600/20">Sim, cancelar</button>
@@ -369,8 +354,8 @@ export default function ClientDashboard({ session }) {
 
       {/* MODAL DE SERVIÇOS */}
       {showServiceModal && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all duration-300 slide-in-from-bottom-10">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4 animate-in fade-in">
+          <div className="bg-white dark:bg-slate-800 w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] transition-all">
             <div className="p-5 border-b border-slate-100 dark:border-slate-700 flex items-center gap-4 bg-slate-50 dark:bg-slate-900/50">
               <button onClick={() => setShowServiceModal(false)} className="p-2 -ml-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 transition">
                 <ArrowLeft className="text-slate-600 dark:text-white" size={24} />
@@ -390,14 +375,14 @@ export default function ClientDashboard({ session }) {
                     <button
                       key={service.id}
                       onClick={() => toggleService(service.id)}
-                      className={`w-full flex justify-between items-center p-4 rounded-2xl border-2 transition-all group active:scale-95
+                      className={`w-full flex justify-between items-center p-4 rounded-2xl border-2 transition-all
                         ${isSelected 
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500' 
                           : 'border-slate-100 dark:border-slate-700 hover:border-blue-200 dark:hover:border-slate-600'
                         }`}
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors
+                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center
                           ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'}`}>
                           {isSelected && <Check size={14} className="text-white" />}
                         </div>
@@ -405,12 +390,10 @@ export default function ClientDashboard({ session }) {
                             <span className={`font-bold text-sm block text-left ${isSelected ? 'text-blue-900 dark:text-blue-100' : 'text-slate-700 dark:text-slate-300'}`}>
                             {service.label}
                             </span>
-                            {isLong && <span className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">Ocupa 2 horários</span>}
+                            {isLong && <span className="text-[10px] text-blue-500 font-bold uppercase">Ocupa 1 hora</span>}
                         </div>
                       </div>
-                      <span className="font-bold text-slate-900 dark:text-white">
-                        R$ {service.price}
-                      </span>
+                      <span className="font-bold text-slate-900 dark:text-white">R$ {service.price}</span>
                     </button>
                   )
                 })}
@@ -419,20 +402,13 @@ export default function ClientDashboard({ session }) {
 
             <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 pb-8 sm:pb-5">
               <div className="flex justify-between items-center mb-4">
-                <div className="flex flex-col">
-                    <span className="text-slate-500 font-medium text-sm">Total estimado</span>
-                    {selectedServices.some(id => LONG_SERVICES.includes(id)) && (
-                        <span className="text-[10px] text-blue-600 font-bold italic">* Duração: 1 hora</span>
-                    )}
-                </div>
-                <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
-                  R$ {totalPrice}
-                </span>
+                <span className="text-slate-500 font-medium text-sm">Total estimado</span>
+                <span className="text-2xl font-extrabold text-slate-900 dark:text-white">R$ {totalPrice}</span>
               </div>
               <button 
                 onClick={handleConfirmBooking}
                 disabled={selectedServices.length === 0 || loading}
-                className="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-600/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 active:scale-95"
+                className="w-full py-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg disabled:opacity-50 transition-all"
               >
                 {loading ? 'Processando...' : 'Confirmar Agendamento'}
               </button>
@@ -448,18 +424,7 @@ export default function ClientDashboard({ session }) {
             <Scissors className="text-blue-600" /> RaulBarber
           </div>
           <div className="flex items-center gap-3">
-            <a 
-              href="https://www.google.com/maps/search/?api=1&query=R.+da+Bolandeira,+3+-+Imbu%C3%AD,+Salvador+-+BA,+41720-440" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-            >
-              <MapPin size={20} />
-            </a>
-            <button 
-              onClick={() => setShowPasswordModal(true)} 
-              className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-            >
+            <button onClick={() => setShowPasswordModal(true)} className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors">
               <Lock size={20} />
             </button>
             <button onClick={() => supabase.auth.signOut()} className="text-slate-400 hover:text-red-500 transition-colors p-2"><LogOut size={20} /></button>
@@ -479,17 +444,17 @@ export default function ClientDashboard({ session }) {
               {/* 1. PROFISSIONAL */}
               <div className="mb-8">
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">1. Profissional</label>
-                <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0 snap-x snap-mandatory scroll-pl-5">
+                <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar -mx-5 px-5 md:mx-0 md:px-0">
                   {barbers.map(barber => (
                     <button
                       key={barber.id}
                       onClick={() => setSelectedBarber(barber.id)}
-                      className={`min-w-[120px] md:min-w-[140px] snap-center p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3 relative overflow-hidden group
+                      className={`min-w-[120px] md:min-w-[140px] p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-3
                         ${selectedBarber === barber.id 
                           ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:border-blue-500 shadow-md' 
-                          : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:border-blue-300'}`}
+                          : 'border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50'}`}
                     >
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold shadow-sm transition-colors
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold
                         ${selectedBarber === barber.id ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-700 text-slate-400'}`}>
                         {barber.full_name.charAt(0)}
                       </div>
@@ -500,13 +465,13 @@ export default function ClientDashboard({ session }) {
               </div>
 
               {/* 2. DATA */}
-              <div className={`mb-8 transition-all duration-500 ${!selectedBarber ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
+              <div className={`mb-8 transition-all ${!selectedBarber ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">2. Data</label>
                 <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-700">
                   <div className="flex justify-between items-center mb-4">
-                    <button onClick={prevMonth} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full active:scale-90 transition"><ChevronLeft size={20} className="dark:text-white"/></button>
+                    <button onClick={prevMonth} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full transition"><ChevronLeft size={20} className="dark:text-white"/></button>
                     <span className="font-bold text-slate-800 dark:text-white capitalize">{format(currentMonth, 'MMMM yyyy', { locale: ptBR })}</span>
-                    <button onClick={nextMonth} disabled={isNextDisabled} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full disabled:opacity-30 disabled:cursor-not-allowed active:scale-90 transition text-slate-800 dark:text-white">
+                    <button onClick={nextMonth} disabled={isNextDisabled} className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-full disabled:opacity-30 text-slate-800 dark:text-white">
                       <ChevronRight size={20}/>
                     </button>
                   </div>
@@ -526,15 +491,13 @@ export default function ClientDashboard({ session }) {
                           disabled={!isWorkDay || isPast || isTooFar}
                           onClick={() => setSelectedDate(date)}
                           className={`
-                            aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold transition-all relative
-                            ${isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 scale-105 z-10' : ''}
-                            ${!isSelected && isWorkDay && !isPast && !isTooFar ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:border-blue-400 border-2 border-transparent' : ''}
+                            aspect-square rounded-xl flex flex-col items-center justify-center text-sm font-bold transition-all
+                            ${isSelected ? 'bg-blue-600 text-white shadow-lg' : ''}
+                            ${!isSelected && isWorkDay && !isPast && !isTooFar ? 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-2 border-transparent' : ''}
                             ${(!isWorkDay || isPast || isTooFar) ? 'bg-slate-100 dark:bg-slate-900/50 text-slate-300 dark:text-slate-700 cursor-not-allowed border-none' : ''}
-                            ${!isWorkDay && !isPast && !isTooFar ? 'bg-red-50 dark:bg-red-900/10 text-red-300 dark:text-red-900' : ''}
                           `}
                         >
                           {format(date, 'd')}
-                          {!isWorkDay && !isPast && !isTooFar && <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1"></div>}
                         </button>
                       );
                     })}
@@ -543,24 +506,28 @@ export default function ClientDashboard({ session }) {
               </div>
 
               {/* 3. HORÁRIO */}
-              <div className={`transition-all duration-500 ${!selectedDate ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
+              <div className={`transition-all ${!selectedDate ? 'opacity-40 pointer-events-none grayscale' : 'opacity-100'}`}>
                 <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 block pl-1">3. Horário</label>
                 {generatedSlots.length === 0 ? (
-                  <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl">Nenhum horário disponível nesta data.</div>
+                  <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl">Nenhum horário disponível.</div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 sm:gap-3">
                     {generatedSlots.map((slot, index) => {
                       const isTaken = occupiedSlots.includes(slot.compareKey);
+                      const isTooSoon = slot.isTooSoon; // Identifica se é < 1 hora de antecedência
+
                       return (
                         <button
                           key={index}
-                          disabled={loading || isTaken}
+                          disabled={loading || isTaken || isTooSoon}
                           onClick={() => handleSlotClick(slot)}
                           className={`
-                            py-3 rounded-xl text-sm font-bold transition-all relative overflow-hidden active:scale-95
+                            py-3 rounded-xl text-sm font-bold transition-all relative
                             ${isTaken 
-                              ? 'bg-slate-100 dark:bg-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-60' 
-                              : 'bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-blue-500 hover:text-blue-600'
+                              ? 'bg-red-50 dark:bg-red-900/10 text-red-300 dark:text-red-900 cursor-not-allowed border-2 border-transparent' 
+                              : isTooSoon 
+                                ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 dark:text-slate-600 cursor-not-allowed border-2 border-dashed border-slate-200 dark:border-slate-700'
+                                : 'bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-700 text-slate-700 dark:text-white hover:border-blue-500 hover:text-blue-600'
                             }
                           `}
                         >
@@ -570,11 +537,16 @@ export default function ClientDashboard({ session }) {
                     })}
                   </div>
                 )}
+                <div className="mt-4 flex flex-wrap gap-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 px-1">
+                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-200 rounded"></div> Livre</div>
+                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-100 border border-dashed border-slate-300 rounded"></div> Em cima da hora</div>
+                    <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-50 rounded"></div> Ocupado</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* SEUS AGENDAMENTOS (COLUNA LATERAL) */}
+          {/* SEUS AGENDAMENTOS */}
           <div className="lg:col-span-1">
              <div className="bg-white dark:bg-slate-800 p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] shadow-sm border border-slate-200 dark:border-slate-700 lg:sticky lg:top-24">
                 <h3 className="font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
@@ -583,27 +555,25 @@ export default function ClientDashboard({ session }) {
                 <div className="space-y-3">
                   {myAppointments.map(app => {
                     if (app.services?.some(s => s.id === 'extra_time')) return null;
-                    
                     return (
                         <div key={app.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
-                        <div className="flex justify-between items-start">
-                            <div>
-                            <div className="font-bold text-slate-900 dark:text-white text-lg">{format(new Date(app.date_time), "HH:mm")}</div>
-                            <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">{format(new Date(app.date_time), "dd 'de' MMM", { locale: ptBR })}</div>
+                            <div className="flex justify-between items-start">
+                                <div>
+                                    <div className="font-bold text-slate-900 dark:text-white text-lg">{format(new Date(app.date_time), "HH:mm")}</div>
+                                    <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">{format(new Date(app.date_time), "dd 'de' MMM", { locale: ptBR })}</div>
+                                </div>
+                                <button onClick={() => requestCancel(app)} className="text-slate-400 hover:text-red-500 bg-white dark:bg-slate-800 p-2 rounded-lg transition shadow-sm border border-slate-100 dark:border-slate-700"><Trash2 size={16}/></button>
                             </div>
-                            <button onClick={() => requestCancel(app)} className="text-slate-400 hover:text-red-500 bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 transition"><Trash2 size={16}/></button>
-                        </div>
-                        
-                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-1 flex justify-between items-center text-sm">
-                            <span className="text-slate-600 dark:text-slate-400 font-medium">{app.profiles?.full_name}</span>
-                            {app.total_price > 0 && <span className="font-bold text-slate-900 dark:text-white bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs text-green-700 dark:text-green-400">R$ {app.total_price}</span>}
-                        </div>
+                            <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-1 flex justify-between items-center text-sm">
+                                <span className="text-slate-600 dark:text-slate-400 font-medium">{app.profiles?.full_name}</span>
+                                {app.total_price > 0 && <span className="font-bold text-slate-900 dark:text-white bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs">R$ {app.total_price}</span>}
+                            </div>
                         </div>
                     );
                   })}
                   {myAppointments.filter(app => !app.services?.some(s => s.id === 'extra_time')).length === 0 && (
                     <div className="text-center py-8 text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                      Você ainda não tem agendamentos.
+                      Sem agendamentos.
                     </div>
                   )}
                 </div>
