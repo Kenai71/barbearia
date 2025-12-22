@@ -94,14 +94,8 @@ export default function ClientDashboard({ session }) {
       .neq('status', 'cancelled')
       .order('date_time', { ascending: true });
     
-    // Filtrar para não mostrar duplicatas visuais se for o mesmo agendamento de 2 slots
     const uniqueApps = [];
-    const seenTimes = new Set();
     (data || []).forEach(app => {
-        const timeKey = `${app.date_time}-${app.barber_id}`;
-        // Se houver dois agendamentos no mesmo minuto (ex: slot 1 e slot 2), 
-        // a lógica de exibição pode precisar de um ID de grupo ou apenas mostrar o primeiro.
-        // Aqui mostramos todos, mas você pode agrupar se preferir.
         uniqueApps.push(app);
     });
 
@@ -154,9 +148,12 @@ export default function ClientDashboard({ session }) {
 
     let current = startTime;
     const now = new Date(); 
+    // Define o limite mínimo de 1 hora de antecedência
+    const minAdvanceTime = addMinutes(now, 60);
 
     while (isBefore(current, endTime)) {
-      if (!isToday(selectedDate) || isBefore(now, current)) {
+      // Regra alterada: Verifica se o horário do slot é posterior ao horário atual + 60 minutos
+      if (!isToday(selectedDate) || isAfter(current, minAdvanceTime)) {
         slots.push({
           label: format(current, 'HH:mm'),
           fullDate: current.toISOString(),
@@ -218,12 +215,10 @@ export default function ClientDashboard({ session }) {
     setLoading(true);
     const servicesToSave = selectedServices.map(id => SERVICES_LIST.find(s => s.id === id));
     
-    // Verificar se algum dos serviços selecionados exige slot duplo
     const needsExtraSlot = selectedServices.some(id => LONG_SERVICES.includes(id));
     
     const appointmentsToInsert = [];
     
-    // Primeiro Slot
     appointmentsToInsert.push({
         client_id: session.user.id, 
         barber_id: selectedBarber,
@@ -233,20 +228,17 @@ export default function ClientDashboard({ session }) {
         total_price: totalPrice
     });
 
-    // Se precisar de slot duplo, prepara o segundo horário (30 min depois)
     if (needsExtraSlot) {
         const nextTime = addMinutes(new Date(tempSlot.fullDate), 30);
         const nextTimeKey = format(nextTime, 'yyyy-MM-dd HH:mm');
         const nextTimeISO = nextTime.toISOString();
 
-        // Verificar se o próximo slot está disponível
         if (occupiedSlots.includes(nextTimeKey)) {
             alert('Atenção: Este serviço requer 1 hora, mas o horário seguinte está ocupado. Por favor, escolha outro horário.');
             setLoading(false);
             return;
         }
 
-        // Verifica se o próximo horário existe na lista de horários da barbearia (não fechou)
         const slotExists = generatedSlots.some(s => s.compareKey === nextTimeKey);
         if (!slotExists) {
             alert('Atenção: Este serviço requer 1 hora, mas este é o último horário disponível do dia.');
@@ -271,7 +263,6 @@ export default function ClientDashboard({ session }) {
       alert(needsExtraSlot ? 'Agendado com sucesso! (Horário duplo reservado)' : 'Agendado com sucesso!');
       fetchMyAppointments();
       
-      // Atualizar slots ocupados localmente
       const newKeys = appointmentsToInsert.map(a => format(new Date(a.date_time), 'yyyy-MM-dd HH:mm'));
       setOccupiedSlots(prev => [...prev, ...newKeys]);
       
@@ -288,13 +279,8 @@ export default function ClientDashboard({ session }) {
   const confirmCancel = async () => {
     if (!appointmentToCancel) return;
     
-    // Se deletar um agendamento que faz parte de um par (mesmo barbeiro, 30 min de diferença), 
-    // idealmente você deveria deletar ambos. Para simplificar, deletamos apenas o selecionado.
-    // Mas aqui buscaremos se há um slot de "extra_time" colado a ele.
-    
     const startTime = new Date(appointmentToCancel.date_time);
     const nextTimeISO = addMinutes(startTime, 30).toISOString();
-    const prevTimeISO = addMinutes(startTime, -30).toISOString();
 
     await supabase.from('appointments').delete().match({ 
         client_id: session.user.id,
@@ -302,7 +288,6 @@ export default function ClientDashboard({ session }) {
         date_time: appointmentToCancel.date_time 
     });
 
-    // Tenta deletar o slot extra se existir
     await supabase.from('appointments').delete().match({
         client_id: session.user.id,
         barber_id: appointmentToCancel.barber_id,
@@ -597,7 +582,6 @@ export default function ClientDashboard({ session }) {
                 </h3>
                 <div className="space-y-3">
                   {myAppointments.map(app => {
-                    // Ignorar visualmente o slot de tempo extra na lista do cliente
                     if (app.services?.some(s => s.id === 'extra_time')) return null;
                     
                     return (
