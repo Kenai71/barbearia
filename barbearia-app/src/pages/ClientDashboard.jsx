@@ -15,6 +15,9 @@ const SERVICES_LIST = [
   { id: 'pigmentacao', label: 'Pigmentação', price: 15 },
 ];
 
+// IDs dos serviços que ocupam 2 horários (1 hora no total)
+const LONG_SERVICES = ['pigmentacao', 'reflexo', 'luzes', 'nevou', 'barba'];
+
 export default function ClientDashboard({ session }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -29,16 +32,13 @@ export default function ClientDashboard({ session }) {
   const [overrides, setOverrides] = useState({});
   const [generatedSlots, setGeneratedSlots] = useState([]);
 
-  // Estados dos Modais
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState(null);
 
-  // Estado do Modal de Serviços
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [tempSlot, setTempSlot] = useState(null); 
   const [selectedServices, setSelectedServices] = useState([]);
 
-  // Estado para Troca de Senha
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
@@ -47,17 +47,12 @@ export default function ClientDashboard({ session }) {
   const today = new Date();
   const maxDate = addMonths(today, 1);
 
-  // Carrega tema
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    if (darkMode) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // Carrega dados iniciais e configura Realtime
   useEffect(() => {
     const fetchData = async () => {
       const { data: barberList } = await supabase.from('profiles').select('*').eq('role', 'barber');
@@ -73,7 +68,6 @@ export default function ClientDashboard({ session }) {
     };
     fetchData();
 
-    // ESCUTA EM TEMPO REAL: Quando o barbeiro mudar o status para 'completed', a lista atualiza sozinha
     const subscription = supabase
       .channel('client_dashboard_updates')
       .on('postgres_changes', { 
@@ -91,16 +85,27 @@ export default function ClientDashboard({ session }) {
     };
   }, [session.user.id]);
 
-  // BUSCA AGENDAMENTOS: Filtrando para NÃO mostrar os concluídos
   const fetchMyAppointments = async () => {
     const { data } = await supabase
       .from('appointments')
       .select('*, profiles:barber_id(full_name)')
       .eq('client_id', session.user.id)
-      .neq('status', 'completed') // Remove da lista se o barbeiro concluiu
-      .neq('status', 'cancelled') // Opcional: também remove se foi cancelado
+      .neq('status', 'completed')
+      .neq('status', 'cancelled')
       .order('date_time', { ascending: true });
-    setMyAppointments(data || []);
+    
+    // Filtrar para não mostrar duplicatas visuais se for o mesmo agendamento de 2 slots
+    const uniqueApps = [];
+    const seenTimes = new Set();
+    (data || []).forEach(app => {
+        const timeKey = `${app.date_time}-${app.barber_id}`;
+        // Se houver dois agendamentos no mesmo minuto (ex: slot 1 e slot 2), 
+        // a lógica de exibição pode precisar de um ID de grupo ou apenas mostrar o primeiro.
+        // Aqui mostramos todos, mas você pode agrupar se preferir.
+        uniqueApps.push(app);
+    });
+
+    setMyAppointments(uniqueApps);
   };
 
   const getDayConfig = (date) => {
@@ -117,9 +122,7 @@ export default function ClientDashboard({ session }) {
 
   const nextMonth = () => {
     const next = addMonths(currentMonth, 1);
-    if (!isAfter(startOfMonth(next), maxDate)) {
-      setCurrentMonth(next);
-    }
+    if (!isAfter(startOfMonth(next), maxDate)) setCurrentMonth(next);
   };
   
   const prevMonth = () => {
@@ -130,7 +133,6 @@ export default function ClientDashboard({ session }) {
 
   const isNextDisabled = isAfter(startOfMonth(addMonths(currentMonth, 1)), maxDate);
 
-  // GERAÇÃO DOS SLOTS
   useEffect(() => {
     setGeneratedSlots([]);
     if (!selectedDate) return;
@@ -166,7 +168,6 @@ export default function ClientDashboard({ session }) {
     setGeneratedSlots(slots);
   }, [selectedDate, schedule, overrides]);
 
-  // BUSCA OCUPADOS
   useEffect(() => {
     const fetchSlots = async () => {
       if (!selectedDate || !selectedBarber) return;
@@ -180,7 +181,7 @@ export default function ClientDashboard({ session }) {
         .from('appointments')
         .select('date_time')
         .eq('barber_id', selectedBarber)
-        .neq('status', 'cancelled') // Slots cancelados ficam livres
+        .neq('status', 'cancelled')
         .gte('date_time', startFilter)
         .lte('date_time', endFilter);
 
@@ -216,21 +217,64 @@ export default function ClientDashboard({ session }) {
   const handleConfirmBooking = async () => {
     setLoading(true);
     const servicesToSave = selectedServices.map(id => SERVICES_LIST.find(s => s.id === id));
-
-    const { error } = await supabase.from('appointments').insert([{ 
+    
+    // Verificar se algum dos serviços selecionados exige slot duplo
+    const needsExtraSlot = selectedServices.some(id => LONG_SERVICES.includes(id));
+    
+    const appointmentsToInsert = [];
+    
+    // Primeiro Slot
+    appointmentsToInsert.push({
         client_id: session.user.id, 
         barber_id: selectedBarber,
         date_time: tempSlot.fullDate, 
         status: 'pending',
         services: servicesToSave,
         total_price: totalPrice
-    }]);
+    });
+
+    // Se precisar de slot duplo, prepara o segundo horário (30 min depois)
+    if (needsExtraSlot) {
+        const nextTime = addMinutes(new Date(tempSlot.fullDate), 30);
+        const nextTimeKey = format(nextTime, 'yyyy-MM-dd HH:mm');
+        const nextTimeISO = nextTime.toISOString();
+
+        // Verificar se o próximo slot está disponível
+        if (occupiedSlots.includes(nextTimeKey)) {
+            alert('Atenção: Este serviço requer 1 hora, mas o horário seguinte está ocupado. Por favor, escolha outro horário.');
+            setLoading(false);
+            return;
+        }
+
+        // Verifica se o próximo horário existe na lista de horários da barbearia (não fechou)
+        const slotExists = generatedSlots.some(s => s.compareKey === nextTimeKey);
+        if (!slotExists) {
+            alert('Atenção: Este serviço requer 1 hora, mas este é o último horário disponível do dia.');
+            setLoading(false);
+            return;
+        }
+
+        appointmentsToInsert.push({
+            client_id: session.user.id, 
+            barber_id: selectedBarber,
+            date_time: nextTimeISO, 
+            status: 'pending',
+            services: [{ id: 'extra_time', label: 'Tempo adicional (Serviço Longo)', price: 0 }],
+            total_price: 0
+        });
+    }
+
+    const { error } = await supabase.from('appointments').insert(appointmentsToInsert);
 
     if (error) alert('Erro: ' + error.message);
     else {
-      alert('Agendado com sucesso!');
+      alert(needsExtraSlot ? 'Agendado com sucesso! (Horário duplo reservado)' : 'Agendado com sucesso!');
       fetchMyAppointments();
-      setOccupiedSlots(prev => [...prev, tempSlot.compareKey]);
+      
+      // Atualizar slots ocupados localmente
+      const newKeys = appointmentsToInsert.map(a => format(new Date(a.date_time), 'yyyy-MM-dd HH:mm'));
+      setOccupiedSlots(prev => [...prev, ...newKeys]);
+      
       setShowServiceModal(false); 
     }
     setLoading(false);
@@ -243,37 +287,44 @@ export default function ClientDashboard({ session }) {
 
   const confirmCancel = async () => {
     if (!appointmentToCancel) return;
-    // Em vez de deletar, você pode mudar o status para 'cancelled' se preferir manter histórico
-    await supabase.from('appointments').delete().eq('id', appointmentToCancel.id);
+    
+    // Se deletar um agendamento que faz parte de um par (mesmo barbeiro, 30 min de diferença), 
+    // idealmente você deveria deletar ambos. Para simplificar, deletamos apenas o selecionado.
+    // Mas aqui buscaremos se há um slot de "extra_time" colado a ele.
+    
+    const startTime = new Date(appointmentToCancel.date_time);
+    const nextTimeISO = addMinutes(startTime, 30).toISOString();
+    const prevTimeISO = addMinutes(startTime, -30).toISOString();
+
+    await supabase.from('appointments').delete().match({ 
+        client_id: session.user.id,
+        barber_id: appointmentToCancel.barber_id,
+        date_time: appointmentToCancel.date_time 
+    });
+
+    // Tenta deletar o slot extra se existir
+    await supabase.from('appointments').delete().match({
+        client_id: session.user.id,
+        barber_id: appointmentToCancel.barber_id,
+        date_time: nextTimeISO
+    });
+
     fetchMyAppointments();
-    if (selectedBarber && appointmentToCancel.barber_id === selectedBarber) {
-       const appKey = format(new Date(appointmentToCancel.date_time), 'yyyy-MM-dd HH:mm');
-       setOccupiedSlots(prev => prev.filter(key => key !== appKey));
-    }
     setShowCancelModal(false);
   };
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
-    if (newPassword !== confirmNewPassword) {
-      alert('As senhas não conferem.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      alert('A senha deve ter pelo menos 6 caracteres.');
-      return;
-    }
+    if (newPassword !== confirmNewPassword) return alert('As senhas não conferem.');
+    if (newPassword.length < 6) return alert('A senha deve ter pelo menos 6 caracteres.');
 
     setLoadingPass(true);
     const { error } = await supabase.auth.updateUser({ password: newPassword });
-
-    if (error) {
-      alert('Erro ao atualizar senha: ' + error.message);
-    } else {
+    if (error) alert('Erro ao atualizar senha: ' + error.message);
+    else {
       alert('Senha atualizada com sucesso!');
       setShowPasswordModal(false);
-      setNewPassword('');
-      setConfirmNewPassword('');
+      setNewPassword(''); setConfirmNewPassword('');
     }
     setLoadingPass(false);
   };
@@ -322,7 +373,7 @@ export default function ClientDashboard({ session }) {
               <AlertTriangle size={28} />
             </div>
             <h3 className="text-xl font-bold dark:text-white mb-2">Cancelar agendamento?</h3>
-            <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita.</p>
+            <p className="text-sm text-slate-500 mb-6">Essa ação não pode ser desfeita. Se o serviço for de longa duração, os horários vinculados serão removidos.</p>
             <div className="flex gap-3">
               <button onClick={() => setShowCancelModal(false)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-slate-700 dark:text-white font-bold">Voltar</button>
               <button onClick={confirmCancel} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-bold shadow-lg shadow-red-600/20">Sim, cancelar</button>
@@ -349,6 +400,7 @@ export default function ClientDashboard({ session }) {
               <div className="space-y-3">
                 {SERVICES_LIST.map((service) => {
                   const isSelected = selectedServices.includes(service.id);
+                  const isLong = LONG_SERVICES.includes(service.id);
                   return (
                     <button
                       key={service.id}
@@ -364,9 +416,12 @@ export default function ClientDashboard({ session }) {
                           ${isSelected ? 'bg-blue-600 border-blue-600' : 'border-slate-300 dark:border-slate-500'}`}>
                           {isSelected && <Check size={14} className="text-white" />}
                         </div>
-                        <span className={`font-bold text-sm ${isSelected ? 'text-blue-900 dark:text-blue-100' : 'text-slate-700 dark:text-slate-300'}`}>
-                          {service.label}
-                        </span>
+                        <div>
+                            <span className={`font-bold text-sm block text-left ${isSelected ? 'text-blue-900 dark:text-blue-100' : 'text-slate-700 dark:text-slate-300'}`}>
+                            {service.label}
+                            </span>
+                            {isLong && <span className="text-[10px] text-blue-500 font-bold uppercase tracking-tight">Ocupa 2 horários</span>}
+                        </div>
                       </div>
                       <span className="font-bold text-slate-900 dark:text-white">
                         R$ {service.price}
@@ -379,7 +434,12 @@ export default function ClientDashboard({ session }) {
 
             <div className="p-5 border-t border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 pb-8 sm:pb-5">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-slate-500 font-medium text-sm">Total estimado</span>
+                <div className="flex flex-col">
+                    <span className="text-slate-500 font-medium text-sm">Total estimado</span>
+                    {selectedServices.some(id => LONG_SERVICES.includes(id)) && (
+                        <span className="text-[10px] text-blue-600 font-bold italic">* Duração: 1 hora</span>
+                    )}
+                </div>
                 <span className="text-2xl font-extrabold text-slate-900 dark:text-white">
                   R$ {totalPrice}
                 </span>
@@ -408,14 +468,12 @@ export default function ClientDashboard({ session }) {
               target="_blank" 
               rel="noopener noreferrer"
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-              title="Ver Localização"
             >
               <MapPin size={20} />
             </a>
             <button 
               onClick={() => setShowPasswordModal(true)} 
               className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-              title="Alterar Senha"
             >
               <Lock size={20} />
             </button>
@@ -538,23 +596,28 @@ export default function ClientDashboard({ session }) {
                    <Clock size={18} className="text-blue-500"/> Seus Agendamentos
                 </h3>
                 <div className="space-y-3">
-                  {myAppointments.map(app => (
-                    <div key={app.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
-                      <div className="flex justify-between items-start">
-                        <div>
-                           <div className="font-bold text-slate-900 dark:text-white text-lg">{format(new Date(app.date_time), "HH:mm")}</div>
-                           <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">{format(new Date(app.date_time), "dd 'de' MMM", { locale: ptBR })}</div>
+                  {myAppointments.map(app => {
+                    // Ignorar visualmente o slot de tempo extra na lista do cliente
+                    if (app.services?.some(s => s.id === 'extra_time')) return null;
+                    
+                    return (
+                        <div key={app.id} className="p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-700 flex flex-col gap-2">
+                        <div className="flex justify-between items-start">
+                            <div>
+                            <div className="font-bold text-slate-900 dark:text-white text-lg">{format(new Date(app.date_time), "HH:mm")}</div>
+                            <div className="text-xs font-bold text-blue-600 uppercase tracking-wide">{format(new Date(app.date_time), "dd 'de' MMM", { locale: ptBR })}</div>
+                            </div>
+                            <button onClick={() => requestCancel(app)} className="text-slate-400 hover:text-red-500 bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 transition"><Trash2 size={16}/></button>
                         </div>
-                        <button onClick={() => requestCancel(app)} className="text-slate-400 hover:text-red-500 bg-white dark:bg-slate-800 p-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 transition"><Trash2 size={16}/></button>
-                      </div>
-                      
-                      <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-1 flex justify-between items-center text-sm">
-                        <span className="text-slate-600 dark:text-slate-400 font-medium">{app.profiles?.full_name}</span>
-                        {app.total_price > 0 && <span className="font-bold text-slate-900 dark:text-white bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs text-green-700 dark:text-green-400">R$ {app.total_price}</span>}
-                      </div>
-                    </div>
-                  ))}
-                  {myAppointments.length === 0 && (
+                        
+                        <div className="pt-2 border-t border-slate-200 dark:border-slate-700 mt-1 flex justify-between items-center text-sm">
+                            <span className="text-slate-600 dark:text-slate-400 font-medium">{app.profiles?.full_name}</span>
+                            {app.total_price > 0 && <span className="font-bold text-slate-900 dark:text-white bg-green-100 dark:bg-green-900/30 px-2 py-0.5 rounded text-xs text-green-700 dark:text-green-400">R$ {app.total_price}</span>}
+                        </div>
+                        </div>
+                    );
+                  })}
+                  {myAppointments.filter(app => !app.services?.some(s => s.id === 'extra_time')).length === 0 && (
                     <div className="text-center py-8 text-slate-400 text-sm bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
                       Você ainda não tem agendamentos.
                     </div>
