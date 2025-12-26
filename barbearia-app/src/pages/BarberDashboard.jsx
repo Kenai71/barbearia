@@ -178,7 +178,7 @@ export default function BarberDashboard({ session, isAdmin }) {
     return () => { supabase.removeChannel(subscription); }; 
   }, [session.user.id]);
 
-  // Funções Auxiliares do Calendário (Omitidas por brevidade, mas devem ser mantidas)
+  // Funções Auxiliares do Calendário
   const getDayConfig = (date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
     if (overrides[dateKey]) return overrides[dateKey];
@@ -338,7 +338,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL HISTÓRICO DE FATURAMENTO (Omitido por brevidade) */}
+      {/* MODAL HISTÓRICO DE FATURAMENTO */}
       {showHistoryModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
@@ -382,7 +382,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL CALENDÁRIO (SEUS CORTES) (Omitido por brevidade) */}
+      {/* MODAL CALENDÁRIO (SEUS CORTES) */}
       {showCalendarModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border dark:border-slate-700 flex flex-col max-h-[85vh]">
@@ -413,7 +413,6 @@ export default function BarberDashboard({ session, isAdmin }) {
                   const config = getDayConfig(date);
                   const isActive = config.active;
                   const isSelected = selectedCalendarDate && isSameDay(date, selectedCalendarDate);
-                  // Verifica se tem agendamento neste dia
                   const hasAppointments = myApps.some(app => isSameDay(new Date(app.date_time), date));
 
                   return (
@@ -472,7 +471,7 @@ export default function BarberDashboard({ session, isAdmin }) {
         </div>
       )}
 
-      {/* MODAL NÃO COMPARECEU (Omitido por brevidade) */}
+      {/* MODAL NÃO COMPARECEU */}
       {showNoShowModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center border dark:border-slate-700">
@@ -515,7 +514,6 @@ export default function BarberDashboard({ session, isAdmin }) {
                 {isPushSubscribed ? 'Notificações Ativas' : 'Ativar Alertas'}
               </span>
             </button>
-            {/* FIM BOTÃO PUSH */}
             
             {isAdmin && (
               <>
@@ -611,7 +609,22 @@ export default function BarberDashboard({ session, isAdmin }) {
                           {app.status === 'confirmed' && (
                             <>
                               <button onClick={() => updateStatus(app.id, 'completed')} className="ml-2 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 p-2 rounded-lg text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors" title="Finalizar Corte"><CheckCircle size={20} /></button>
-                              <button onClick={() => handleOpenNoShow(app)} disabled={!isTodayApp} className={`ml-1 p-2 rounded-lg border transition-colors ${isTodayApp ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-500 hover:bg-red-100' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 text-slate-300 cursor-not-allowed'}`}><UserX size={20} /></button>
+                              
+                              {/* --- BOTÃO CANCELAR ADICIONADO AQUI --- */}
+                              <button 
+                                onClick={() => {
+                                    if(window.confirm('Tem certeza que deseja cancelar este agendamento confirmado?')) {
+                                        updateStatus(app.id, 'cancelled');
+                                    }
+                                }} 
+                                className="ml-1 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 p-2 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 transition-colors" 
+                                title="Cancelar Agendamento"
+                              >
+                                <X size={20} />
+                              </button>
+                              {/* ------------------------------------- */}
+
+                              <button onClick={() => handleOpenNoShow(app)} disabled={!isTodayApp} className={`ml-1 p-2 rounded-lg border transition-colors ${isTodayApp ? 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-500 hover:bg-red-100' : 'bg-slate-100 dark:bg-slate-800 border-slate-200 text-slate-300 cursor-not-allowed'}`} title="Cliente não compareceu"><UserX size={20} /></button>
                             </>
                           )}
                         </div>
